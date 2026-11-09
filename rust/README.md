@@ -1,5 +1,8 @@
 # LuoDingo (Rust)
 
+[![Last commit affecting rust/](https://img.shields.io/github/last-commit/kjwenger/LuoDingo?path=rust&label=last%20commit%20(rust%2F))](https://github.com/kjwenger/LuoDingo/commits/main/rust)
+[![Rust](https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white)](https://www.rust-lang.org)
+
 A small Rust client and desktop GUI for the unofficial Duolingo API. See the [top-level README](../README.md) for what LuoDingo is and why the API is "unofficial" — this document covers just the Rust implementation.
 
 ## What it does

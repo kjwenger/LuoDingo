@@ -1,5 +1,9 @@
 # LuoDingo (OpenAPI / Next.js)
 
+[![Last commit affecting openapi/](https://img.shields.io/github/last-commit/kjwenger/LuoDingo?path=openapi&label=last%20commit%20(openapi%2F))](https://github.com/kjwenger/LuoDingo/commits/main/openapi)
+[![Next.js](https://img.shields.io/badge/Next.js-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+
 A reverse-engineered **OpenAPI 3.0** description of the unofficial Duolingo endpoints LuoDingo uses, served via a [Swagger UI](https://swagger.io/tools/swagger-ui/) page built with [Next.js](https://nextjs.org). See the [top-level README](../README.md) for what LuoDingo is and why the API is "unofficial".
 
 This exists for two reasons:

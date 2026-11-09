@@ -1,5 +1,9 @@
 # LuoDingo
 
+[![Last commit](https://img.shields.io/github/last-commit/kjwenger/LuoDingo)](https://github.com/kjwenger/LuoDingo/commits/main)
+[![Open issues](https://img.shields.io/github/issues/kjwenger/LuoDingo)](https://github.com/kjwenger/LuoDingo/issues)
+[![Top language](https://img.shields.io/github/languages/top/kjwenger/LuoDingo)](https://github.com/kjwenger/LuoDingo)
+
 LuoDingo is a personal toolkit for working with your own [Duolingo](https://www.duolingo.com) account data through Duolingo's **unofficial** REST API. Duolingo doesn't publish a public API, but the endpoints its own web and mobile clients use can be called directly once you're authenticated as yourself.
 
 Today that means pulling your profile stats and seeing XP/activity updates for the people you follow and the people who follow you (a lightweight stand-in for Duolingo's in-app "Friends" feed). The project isn't tied to any particular language or UI — the `rust/` folder holds the current implementation, but the ideas here (auth, endpoints, data shape) apply to any client you might build on top of them.
