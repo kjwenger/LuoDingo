@@ -9,7 +9,7 @@
 
 LuoDingo is a personal toolkit for working with your own [Duolingo](https://www.duolingo.com) account data through Duolingo's **unofficial** REST API. Duolingo doesn't publish a public API, but the endpoints its own web and mobile clients use can be called directly once you're authenticated as yourself.
 
-Today that means pulling your profile stats and seeing XP/activity updates for the people you follow and the people who follow you (a lightweight stand-in for Duolingo's in-app "Friends" feed). The project isn't tied to any particular language or UI — the `rust/` folder holds the current implementation, but the ideas here (auth, endpoints, data shape) apply to any client you might build on top of them.
+Today that means pulling your profile stats and seeing XP/activity updates for the people you follow and the people who follow you, and reacting to them ("Celebrate") — a stand-in for Duolingo's in-app "Friends" feed. The project isn't tied to any particular language or UI: `rust/` and `nextjs/` are two independent implementations of the same functionality, sharing nothing but the underlying API knowledge (auth, endpoints, data shape, documented in `nextjs/public/duolingo.yaml`) — not a shared library either one depends on.
 
 ## Why "unofficial"?
 
@@ -30,8 +30,8 @@ LuoDingo authenticates using a **JWT token** copied out of a browser session, no
 
 1. Log into [duolingo.com](https://www.duolingo.com) in your browser as normal.
 2. Open your browser's developer tools (F12), go to the **Storage**/**Application** tab, and find the `jwt_token` cookie under `https://www.duolingo.com`.
-3. Copy its value into your local `.env` file (see `rust/.env.example` for the expected format — copy it to `rust/.env` and fill in `DUOLINGO_JWT_TOKEN`).
+3. Copy its value into a local env file — `rust/.env` for the Rust apps, `nextjs/.env.local` for the Next.js one (same JWT works for both; see `rust/.env.example` / `nextjs/.env.local.example` for the expected format, and fill in `DUOLINGO_JWT_TOKEN`).
 
 This JWT encodes your Duolingo user ID and, in practice, doesn't expire on its own — but it **will** stop working if you change your Duolingo password, at which point you'll need to extract a fresh one.
 
-**Never commit `.env`.** It already is covered by `.gitignore` at the repo root, but double-check before pushing if you ever restructure the project. Treat the JWT like a password: anyone with it can act as you against the Duolingo API.
+**Never commit your env file.** Both `rust/.env` and `nextjs/.env.local` are already covered by `.gitignore` (`.env*`), but double-check before pushing if you ever restructure the project. Treat the JWT like a password: anyone with it can act as you against the Duolingo API.
