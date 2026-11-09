@@ -1,5 +1,6 @@
 # LuoDingo (Rust)
 
+[![Rust CI](https://github.com/kjwenger/LuoDingo/actions/workflows/rust.yml/badge.svg)](https://github.com/kjwenger/LuoDingo/actions/workflows/rust.yml)
 [![Last commit affecting rust/](https://img.shields.io/github/last-commit/kjwenger/LuoDingo?path=rust&label=last%20commit%20(rust%2F))](https://github.com/kjwenger/LuoDingo/commits/main/rust)
 [![Rust](https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white)](https://www.rust-lang.org)
 

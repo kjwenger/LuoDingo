@@ -1,5 +1,8 @@
 # LuoDingo
 
+[![Rust](https://github.com/kjwenger/LuoDingo/actions/workflows/rust.yml/badge.svg)](https://github.com/kjwenger/LuoDingo/actions/workflows/rust.yml)
+[![OpenAPI (Next.js) Lint](https://github.com/kjwenger/LuoDingo/actions/workflows/openapi-lint.yml/badge.svg)](https://github.com/kjwenger/LuoDingo/actions/workflows/openapi-lint.yml)
+[![License: Unlicense](https://img.shields.io/github/license/kjwenger/LuoDingo)](UNLICENSE)
 [![Last commit](https://img.shields.io/github/last-commit/kjwenger/LuoDingo)](https://github.com/kjwenger/LuoDingo/commits/main)
 [![Open issues](https://img.shields.io/github/issues/kjwenger/LuoDingo)](https://github.com/kjwenger/LuoDingo/issues)
 [![Top language](https://img.shields.io/github/languages/top/kjwenger/LuoDingo)](https://github.com/kjwenger/LuoDingo)
