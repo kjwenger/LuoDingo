@@ -1,7 +1,7 @@
 # LuoDingo
 
 [![Rust](https://github.com/kjwenger/LuoDingo/actions/workflows/rust.yml/badge.svg)](https://github.com/kjwenger/LuoDingo/actions/workflows/rust.yml)
-[![OpenAPI (Next.js) Lint](https://github.com/kjwenger/LuoDingo/actions/workflows/openapi-lint.yml/badge.svg)](https://github.com/kjwenger/LuoDingo/actions/workflows/openapi-lint.yml)
+[![Next.js Lint](https://github.com/kjwenger/LuoDingo/actions/workflows/nextjs-lint.yml/badge.svg)](https://github.com/kjwenger/LuoDingo/actions/workflows/nextjs-lint.yml)
 [![License: Unlicense](https://img.shields.io/github/license/kjwenger/LuoDingo)](UNLICENSE)
 [![Last commit](https://img.shields.io/github/last-commit/kjwenger/LuoDingo)](https://github.com/kjwenger/LuoDingo/commits/main)
 [![Open issues](https://img.shields.io/github/issues/kjwenger/LuoDingo)](https://github.com/kjwenger/LuoDingo/issues)
@@ -22,7 +22,7 @@ There is no supported, documented Duolingo API for third-party apps. Everything 
 ## What's here
 
 - **[`rust/`](rust/README.md)** — a Rust Cargo workspace: a UI-agnostic core (the API client and app state) plus two interchangeable desktop GUI frontends built on top of it — one with [`egui`](https://github.com/emilk/egui) (pure Rust, no system dependencies) and one with GTK4/libadwaita (native GNOME look and feel). See that folder's README for build/run instructions and implementation details.
-- **[`openapi/`](openapi/README.md)** — a reverse-engineered OpenAPI spec for the same endpoints, served as a browsable Swagger UI page via Next.js. Currently just documentation; the plan is to eventually build a web UI here with equivalent functionality to the Rust desktop apps, as a second independent frontend.
+- **[`nextjs/`](nextjs/README.md)** — a reverse-engineered OpenAPI spec for the same endpoints (served as a browsable Swagger UI page), plus a web UI with equivalent functionality to the Rust desktop apps, as a second independent frontend.
 
 ## Credentials
 

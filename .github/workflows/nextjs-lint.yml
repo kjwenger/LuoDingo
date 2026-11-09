@@ -1,15 +1,15 @@
-name: OpenAPI (Next.js) Lint
+name: Next.js Lint
 
 on:
   push:
     branches: [main]
     paths:
-      - "openapi/**"
-      - ".github/workflows/openapi-lint.yml"
+      - "nextjs/**"
+      - ".github/workflows/nextjs-lint.yml"
   pull_request:
     paths:
-      - "openapi/**"
-      - ".github/workflows/openapi-lint.yml"
+      - "nextjs/**"
+      - ".github/workflows/nextjs-lint.yml"
 
 jobs:
   lint:
@@ -22,16 +22,16 @@ jobs:
         with:
           node-version: "22"
           cache: "npm"
-          cache-dependency-path: openapi/package-lock.json
+          cache-dependency-path: nextjs/package-lock.json
 
       - name: Install dependencies
-        working-directory: openapi
+        working-directory: nextjs
         run: npm ci
 
       - name: Lint
-        working-directory: openapi
+        working-directory: nextjs
         run: npm run lint
 
       - name: Validate OpenAPI spec
-        working-directory: openapi
+        working-directory: nextjs
         run: npx @redocly/cli lint public/duolingo.yaml

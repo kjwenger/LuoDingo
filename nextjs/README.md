@@ -1,7 +1,7 @@
-# LuoDingo (OpenAPI / Next.js)
+# LuoDingo (Next.js)
 
-[![Lint](https://github.com/kjwenger/LuoDingo/actions/workflows/openapi-lint.yml/badge.svg)](https://github.com/kjwenger/LuoDingo/actions/workflows/openapi-lint.yml)
-[![Last commit affecting openapi/](https://img.shields.io/github/last-commit/kjwenger/LuoDingo?path=openapi&label=last%20commit%20(openapi%2F))](https://github.com/kjwenger/LuoDingo/commits/main/openapi)
+[![Lint](https://github.com/kjwenger/LuoDingo/actions/workflows/nextjs-lint.yml/badge.svg)](https://github.com/kjwenger/LuoDingo/actions/workflows/nextjs-lint.yml)
+[![Last commit affecting nextjs/](https://img.shields.io/github/last-commit/kjwenger/LuoDingo?path=nextjs&label=last%20commit%20(nextjs%2F))](https://github.com/kjwenger/LuoDingo/commits/main/nextjs)
 [![Next.js](https://img.shields.io/badge/Next.js-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 
