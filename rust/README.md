@@ -5,13 +5,13 @@ A small Rust client and desktop GUI for the unofficial Duolingo API. See the [to
 ## What it does
 
 - Authenticates using a JWT extracted from a logged-in browser session (see **Credentials** below).
-- Fetches your profile and the lists of people you follow (`following`) and who follow you (`followers`), including each person's weekly/monthly/total XP and a recent-activity flag.
-- Shows that data in a native desktop window (built with [`egui`](https://github.com/emilk/egui)/`eframe`), with tabs for Following/Followers, a sortable table, and a manual Refresh button.
+- Fetches the friends activity feed (league promotions, kudos, follows — what's actually "recently achieved"), plus the lists of people you follow (`following`) and who follow you (`followers`), including each person's weekly/monthly/total XP and a recent-activity flag.
+- Shows that data in a native desktop window (built with [`egui`](https://github.com/emilk/egui)/`eframe`), with an Updates tab (the achievement feed) plus Following/Followers tables, and a manual Refresh button.
 
 ## Layout
 
-- `src/api.rs` — the Duolingo API client: JWT handling, user-id decoding, and the HTTP calls (`profile`, `following`, `followers`).
-- `src/main.rs` — the `egui` application: window state, tabs, and the friends table.
+- `src/api.rs` — the Duolingo API client: JWT handling, user-id decoding, and the HTTP calls (`profile`, `following`, `followers`, `feed`).
+- `src/main.rs` — the `egui` application: window state, tabs, the updates list, and the friends table.
 
 ## Requirements
 
@@ -41,6 +41,6 @@ On first run, dependencies are fetched and compiled, which can take a minute or 
 
 ## Known limitations
 
-- The unofficial API doesn't expose a timestamped activity feed (e.g. "X finished a lesson 3 hours ago") — only aggregate weekly/monthly/total XP and a boolean recent-activity flag. The friends table is the closest practical equivalent to Duolingo's in-app Friends feed.
-- Some users have no display name set (`name` is `null` in the API response); the app falls back to their username in that case.
+- The activity feed (`GET /2023-05-23/friends/users/{id}/feed/v2`) only surfaces what Duolingo's own kudos system tracks — league promotions, streak/league milestones, follows, etc. It doesn't include every possible action (e.g. ordinary lesson completions aren't cards unless they trigger a kudos-worthy milestone).
+- Some users have no display name set (`name` is `null` in the API response); the app falls back to their username in the Following/Followers tables, and to "Someone" in the Updates feed.
 - Refresh is manual (no auto-polling) and runs on the UI thread, so the window will briefly freeze while a refresh is in flight.

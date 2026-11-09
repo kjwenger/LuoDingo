@@ -2,6 +2,7 @@ use serde::Deserialize;
 use std::env;
 
 const API_BASE: &str = "https://www.duolingo.com/2017-06-30";
+const FRIENDS_API_BASE: &str = "https://www.duolingo.com/2023-05-23";
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Profile {
@@ -36,6 +37,30 @@ struct SubscriptionsResponse {
 #[derive(Debug, Deserialize)]
 struct SubscribersResponse {
     subscribers: Vec<Friend>,
+}
+
+/// A single entry in the friends activity feed, e.g. a league promotion or a kudos offer.
+#[derive(Debug, Deserialize, Clone)]
+pub struct FeedCard {
+    #[serde(rename = "cardType")]
+    pub card_type: String,
+    #[serde(rename = "displayName")]
+    pub display_name: Option<String>,
+    pub body: Option<String>,
+    pub timestamp: i64,
+    #[serde(rename = "userId")]
+    pub user_id: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct FeedResponse {
+    feed: Vec<FeedGroup>,
+}
+
+#[derive(Debug, Deserialize)]
+struct FeedGroup {
+    #[serde(rename = "feedCards")]
+    feed_cards: Vec<FeedCard>,
 }
 
 pub struct Client {
@@ -75,6 +100,18 @@ impl Client {
         let resp: SubscribersResponse =
             self.get(&format!("{API_BASE}/users/{}/subscribers", self.user_id))?;
         Ok(resp.subscribers)
+    }
+
+    /// The friends activity feed: league promotions, kudos, follows, etc.,
+    /// most recent first.
+    pub fn feed(&self) -> Result<Vec<FeedCard>, String> {
+        let resp: FeedResponse = self.get(&format!(
+            "{FRIENDS_API_BASE}/friends/users/{}/feed/v2?uiLanguage=en",
+            self.user_id
+        ))?;
+        let mut cards: Vec<FeedCard> = resp.feed.into_iter().flat_map(|g| g.feed_cards).collect();
+        cards.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        Ok(cards)
     }
 
     fn get<T: serde::de::DeserializeOwned>(&self, url: &str) -> Result<T, String> {

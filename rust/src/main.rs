@@ -1,10 +1,11 @@
 mod api;
 
-use api::{Client, Friend};
+use api::{Client, FeedCard, Friend};
 use eframe::egui;
 
 #[derive(PartialEq, Clone, Copy)]
 enum Tab {
+    Updates,
     Following,
     Followers,
 }
@@ -12,6 +13,7 @@ enum Tab {
 struct App {
     client: Client,
     tab: Tab,
+    updates: Vec<FeedCard>,
     following: Vec<Friend>,
     followers: Vec<Friend>,
     error: Option<String>,
@@ -21,7 +23,8 @@ impl App {
     fn new(client: Client) -> Self {
         let mut app = Self {
             client,
-            tab: Tab::Following,
+            tab: Tab::Updates,
+            updates: Vec::new(),
             following: Vec::new(),
             followers: Vec::new(),
             error: None,
@@ -32,6 +35,11 @@ impl App {
 
     fn refresh(&mut self) {
         self.error = None;
+
+        match self.client.feed() {
+            Ok(cards) => self.updates = cards,
+            Err(e) => self.error = Some(format!("feed: {e}")),
+        }
 
         match self.client.following() {
             Ok(mut friends) => {
@@ -47,6 +55,27 @@ impl App {
                 self.followers = friends;
             }
             Err(e) => self.error = Some(format!("followers: {e}")),
+        }
+    }
+
+    fn updates_list(ui: &mut egui::Ui, cards: &[FeedCard]) {
+        if cards.is_empty() {
+            ui.label("No recent friend updates.");
+            return;
+        }
+
+        for card in cards {
+            ui.horizontal_wrapped(|ui| {
+                let name = card.display_name.as_deref().unwrap_or("Someone");
+                ui.strong(name);
+                ui.label(card.body.as_deref().unwrap_or(card.card_type.as_str()));
+            });
+            ui.label(
+                egui::RichText::new(humanize_timestamp(card.timestamp))
+                    .small()
+                    .color(egui::Color32::GRAY),
+            );
+            ui.separator();
         }
     }
 
@@ -112,12 +141,34 @@ impl App {
     }
 }
 
+fn humanize_timestamp(ts: i64) -> String {
+    use chrono::{Local, TimeZone};
+
+    let then = match Local.timestamp_opt(ts, 0) {
+        chrono::offset::LocalResult::Single(dt) => dt,
+        _ => return "unknown time".to_string(),
+    };
+    let diff = Local::now().signed_duration_since(then);
+
+    if diff.num_seconds() < 60 {
+        "just now".to_string()
+    } else if diff.num_minutes() < 60 {
+        format!("{}m ago", diff.num_minutes())
+    } else if diff.num_hours() < 24 {
+        format!("{}h ago", diff.num_hours())
+    } else if diff.num_days() < 30 {
+        format!("{}d ago", diff.num_days())
+    } else {
+        then.format("%Y-%m-%d").to_string()
+    }
+}
+
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let panel_frame = egui::Frame::central_panel(&ui.style().clone());
         panel_frame.show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.heading("Duolingo Friend Updates");
+                ui.heading("LuoDingo");
                 if ui.button("Refresh").clicked() {
                     self.refresh();
                 }
@@ -132,6 +183,11 @@ impl eframe::App for App {
             ui.horizontal(|ui| {
                 ui.selectable_value(
                     &mut self.tab,
+                    Tab::Updates,
+                    format!("Updates ({})", self.updates.len()),
+                );
+                ui.selectable_value(
+                    &mut self.tab,
                     Tab::Following,
                     format!("Following ({})", self.following.len()),
                 );
@@ -144,13 +200,10 @@ impl eframe::App for App {
 
             ui.separator();
 
-            let friends = match self.tab {
-                Tab::Following => &self.following,
-                Tab::Followers => &self.followers,
-            };
-
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                Self::friends_table(ui, friends);
+            egui::ScrollArea::vertical().show(ui, |ui| match self.tab {
+                Tab::Updates => Self::updates_list(ui, &self.updates),
+                Tab::Following => Self::friends_table(ui, &self.following),
+                Tab::Followers => Self::friends_table(ui, &self.followers),
             });
         });
     }
