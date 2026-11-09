@@ -3,6 +3,35 @@
 
 use crate::api::FeedCard;
 
+/// The card's displayable achievement/update text. Most card types already have this in
+/// `body`; SHARE_SENTENCE_OFFER is the one confirmed exception -- `body` is `""` there,
+/// with the actual content in `from_sentence`/`to_sentence` instead. Found live (via the
+/// Next.js frontend first): a raw card showed the literal string "SHARE_SENTENCE_OFFER"
+/// to the user before this existed, because the old fallback (`body` -> `card_type`) had
+/// nothing better to fall back to.
+pub fn card_body(card: &FeedCard) -> String {
+    if card.card_type == "SHARE_SENTENCE_OFFER"
+        && let (Some(from), Some(to)) = (&card.from_sentence, &card.to_sentence)
+    {
+        return format!("\"{from}\" \u{2192} \"{to}\"");
+    }
+    card.body
+        .clone()
+        .unwrap_or_else(|| card.card_type.clone())
+}
+
+/// Whether the Celebrate button should be shown at all. `event_id` alone isn't enough --
+/// found live: FOLLOW cards have a real event_id but `reaction_counts` comes back `null`
+/// (empty map here, since the field defaults), because Duolingo tracks no reaction
+/// mechanism for them at all. SHARE_SENTENCE_OFFER cards use `like`/`haha`/`love`
+/// reactions, not `congrats`. Sending CONGRATS (the only reaction value actually verified
+/// against the live API, see `api::CELEBRATE_REACTION`) would be wrong for either. Only
+/// show it where CONGRATS is the reaction the real app itself would send for a bare click.
+pub fn can_celebrate(card: &FeedCard) -> bool {
+    card.event_id.is_some()
+        && matches!(card.card_type.as_str(), "KUDOS_OFFER" | "KUDOS_MILESTONE")
+}
+
 pub fn reaction_emoji(name: &str) -> &'static str {
     match name {
         "congrats" => "\u{1F389}",      // 🎉

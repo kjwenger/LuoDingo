@@ -9,7 +9,9 @@ use libadwaita as adw;
 use libadwaita::prelude::*;
 use log::{debug, info, warn};
 
-use luodingo_core::format::{self, avatar_url, comment_indicator, humanize_timestamp, reactions_summary};
+use luodingo_core::format::{
+    self, avatar_url, can_celebrate, card_body, comment_indicator, humanize_timestamp, reactions_summary,
+};
 use luodingo_core::{fetch_bytes, Controller, FeedCard, Friend};
 
 const CARD_CSS: &str = "
@@ -141,8 +143,7 @@ fn update_card(
     }
     content.append(&header_row);
 
-    let body_text = card.body.clone().unwrap_or_else(|| card.card_type.clone());
-    let body_label = gtk::Label::new(Some(&body_text));
+    let body_label = gtk::Label::new(Some(&card_body(card)));
     body_label.set_halign(gtk::Align::Start);
     body_label.set_wrap(true);
     body_label.set_xalign(0.0);
@@ -150,7 +151,8 @@ fn update_card(
 
     let actions_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
 
-    if let Some(event_id) = card.event_id.clone() {
+    if can_celebrate(card) {
+        let event_id = card.event_id.clone().unwrap();
         let already = card.reaction_type.is_some();
         let celebrate_btn =
             gtk::Button::with_label(if already { "\u{1F389} Celebrated" } else { "\u{1F389} Celebrate" });

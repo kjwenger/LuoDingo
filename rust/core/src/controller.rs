@@ -2,6 +2,7 @@
 //! reads its fields; none of this depends on any particular UI toolkit.
 
 use crate::api::{Client, FeedCard, Friend, CELEBRATE_REACTION};
+use crate::format::can_celebrate;
 use log::{info, warn};
 
 pub struct Controller {
@@ -96,12 +97,14 @@ impl Controller {
         }
     }
 
-    /// Every update that can still be celebrated: has an event id (FOLLOW cards don't) and
-    /// hasn't already been reacted to.
+    /// Every update that can still be celebrated with CONGRATS (see
+    /// `format::can_celebrate` -- not just "has an event id": FOLLOW cards have one too,
+    /// but no reaction mechanism Duolingo tracks for them, and SHARE_SENTENCE_OFFER uses
+    /// like/haha/love, not congrats) and hasn't already been reacted to.
     pub fn celebratable_count(&self) -> usize {
         self.updates
             .iter()
-            .filter(|c| c.event_id.is_some() && c.reaction_type.is_none())
+            .filter(|c| can_celebrate(c) && c.reaction_type.is_none())
             .count()
     }
 
@@ -112,7 +115,7 @@ impl Controller {
         let event_ids: Vec<String> = self
             .updates
             .iter()
-            .filter(|c| c.reaction_type.is_none())
+            .filter(|c| can_celebrate(c) && c.reaction_type.is_none())
             .filter_map(|c| c.event_id.clone())
             .collect();
 

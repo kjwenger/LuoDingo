@@ -1,6 +1,8 @@
 use eframe::egui;
 use log::{info, trace, warn};
-use luodingo_core::format::{self, avatar_url, comment_indicator, humanize_timestamp, reactions_summary};
+use luodingo_core::format::{
+    self, avatar_url, can_celebrate, card_body, comment_indicator, humanize_timestamp, reactions_summary,
+};
 use luodingo_core::{Controller, FeedCard, Friend};
 
 // Approximate Duolingo dark-theme palette (not pixel-matched to the real site).
@@ -111,10 +113,11 @@ impl App {
                                 }
                             });
 
-                            ui.label(card.body.as_deref().unwrap_or(card.card_type.as_str()));
+                            ui.label(card_body(card));
 
                             ui.horizontal(|ui| {
-                                if let Some(event_id) = &card.event_id {
+                                if can_celebrate(card) {
+                                    let event_id = card.event_id.as_ref().unwrap();
                                     let already = card.reaction_type.is_some();
                                     let label = if already {
                                         "\u{1F389} Celebrated"

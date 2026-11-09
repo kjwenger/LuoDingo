@@ -94,7 +94,9 @@ pub struct FeedCard {
     #[serde(rename = "kudosIcon", default)]
     pub kudos_icon: Option<String>,
     /// Identifies this specific event; required as `groupId` when reacting to the card
-    /// via `Client::react`. Absent on cards that can't be reacted to (e.g. FOLLOW).
+    /// via `Client::react`. Present even on cards that shouldn't actually be reacted to
+    /// (e.g. FOLLOW has one too, despite having no reaction mechanism at all -- see
+    /// `format::can_celebrate`, which is the real gate, not this field's presence).
     #[serde(rename = "eventId", default)]
     pub event_id: Option<String>,
     /// Reaction name (e.g. "congrats", "love") -> count. Absent on cards that can't be
@@ -109,6 +111,12 @@ pub struct FeedCard {
     /// no card observed so far has had any comments.
     #[serde(rename = "commentPreview", default)]
     pub comment_preview: Option<serde_json::Value>,
+    /// SHARE_SENTENCE_OFFER-only: `body` is `""` for this card type, the actual content
+    /// lives here instead.
+    #[serde(rename = "fromSentence", default)]
+    pub from_sentence: Option<String>,
+    #[serde(rename = "toSentence", default)]
+    pub to_sentence: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
