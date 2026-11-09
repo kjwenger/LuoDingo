@@ -79,10 +79,12 @@ No secret is needed to *build* the image — same reasoning as the CI build step
 
 The private registry this has been pushed to is `192.168.178.17:5000` — a plain **Docker Registry v2 over HTTP, no TLS, no auth** (confirmed via `GET /v2/` returning `200`). Current images there: `luodingo-nextjs:latest` and `luodingo-nextjs:<git-short-sha>` (e.g. `482347a`) for traceability.
 
-Because it's plain HTTP, `docker push` won't work out of the box — the Docker daemon refuses to talk to a non-TLS registry unless it's listed in `insecure-registries` in `/etc/docker/daemon.json`, which needs a **daemon restart** to take effect (disruptive if other containers are running without `--live-restore`). Instead, push with [`skopeo`](https://github.com/containers/skopeo) (`apt install skopeo`), which talks to the registry directly and falls back to HTTP on its own — no daemon config or restart needed:
+Because it's plain HTTP, `docker push` won't work out of the box — the Docker daemon refuses to talk to a non-TLS registry unless it's listed in `insecure-registries` in `/etc/docker/daemon.json`, which needs a **daemon restart** to take effect (disruptive if other containers are running without `--live-restore`). Instead, push with [`skopeo`](https://github.com/containers/skopeo) (`apt install skopeo`), which talks to the registry directly and falls back to HTTP on its own — no daemon config or restart needed.
+
+**Architecture matters — the actual deploy target (JoNAS, a Raspberry Pi 4) is `linux/arm64`.** A plain `docker build` targets whatever your *build machine's* architecture is; built on a typical amd64 dev box, that image fails on the Pi with `exec format error` (the kernel can't run an amd64 binary) — hit this live the first time. Cross-build for arm64 explicitly with `docker buildx` (register QEMU emulation once per machine if building on non-ARM hardware: `docker run --privileged --rm tonistiigi/binfmt --install all`):
 
 ```bash
-docker build -t luodingo-nextjs:latest -t luodingo-nextjs:$(git rev-parse --short HEAD) .
+docker buildx build --platform linux/arm64 -t luodingo-nextjs:latest -t luodingo-nextjs:$(git rev-parse --short HEAD) --load .
 
 skopeo copy --dest-tls-verify=false \
   docker-daemon:luodingo-nextjs:latest \
@@ -93,9 +95,9 @@ skopeo copy --dest-tls-verify=false \
   docker://192.168.178.17:5000/luodingo-nextjs:$(git rev-parse --short HEAD)
 ```
 
-Verify what's on the registry with `curl http://192.168.178.17:5000/v2/luodingo-nextjs/tags/list`.
+QEMU-emulated cross-arch builds are noticeably slower than native ones (minutes, not seconds, for `npm ci`/`next build`) — expect to run it in the background. Verify the architecture actually landed correctly before trusting a push: `curl http://192.168.178.17:5000/v2/luodingo-nextjs/manifests/latest` → pull the `config.digest` → `curl .../blobs/<digest>` → check `.architecture` is `arm64`, not `amd64`. Verify tags present with `curl http://192.168.178.17:5000/v2/luodingo-nextjs/tags/list`.
 
-This is a manual, one-off process right now — nothing in CI pushes here automatically.
+This is a manual, one-off process right now — nothing in CI pushes here automatically, and CI's own Docker build step (`nextjs-lint.yml`) deliberately builds for the runner's native amd64 only, just to catch Dockerfile bitrot — it isn't meant to produce a deployable artifact.
 
 ## Validating the spec
 
