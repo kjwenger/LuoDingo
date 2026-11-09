@@ -84,11 +84,12 @@ impl App {
             .body(|body| {
                 body.rows(20.0, friends.len(), |mut row| {
                     let friend = &friends[row.index()];
+                    let display_name = friend.name.as_deref().unwrap_or(&friend.username);
                     row.col(|ui| {
                         ui.label(if friend.has_plus {
-                            format!("{} \u{1F48E}", friend.name)
+                            format!("{display_name} \u{1F48E}")
                         } else {
-                            friend.name.clone()
+                            display_name.to_string()
                         });
                     });
                     row.col(|ui| {

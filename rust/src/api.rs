@@ -14,7 +14,7 @@ pub struct Profile {
 #[derive(Debug, Deserialize, Clone)]
 pub struct Friend {
     pub id: u64,
-    pub name: String,
+    pub name: Option<String>,
     pub username: String,
     #[serde(rename = "totalXp")]
     pub total_xp: u64,
