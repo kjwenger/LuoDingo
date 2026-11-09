@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use gtk4 as gtk;
 use gtk4::prelude::*;
-use gtk4::{gdk, glib};
+use gtk4::{gdk, gio, glib};
 use libadwaita as adw;
 use libadwaita::prelude::*;
 use log::{debug, info, warn};
@@ -46,48 +46,54 @@ fn load_css() {
     }
 }
 
-fn avatar_texture(url: &str, cache: &mut HashMap<String, gdk::Texture>) -> Option<gdk::Texture> {
-    if let Some(texture) = cache.get(url) {
-        debug!("avatar cache hit: {url}");
-        return Some(texture.clone());
-    }
-
-    debug!("avatar cache miss, fetching: {url}");
-    let bytes = match fetch_bytes(url) {
-        Ok(b) => b,
-        Err(e) => {
-            warn!("avatar failed to fetch ({url}): {e}");
-            return None;
-        }
-    };
-
-    let texture = match gdk::Texture::from_bytes(&glib::Bytes::from(&bytes)) {
-        Ok(t) => t,
-        Err(e) => {
-            warn!("avatar failed to decode ({url}, {} bytes): {e}", bytes.len());
-            return None;
-        }
-    };
-
-    debug!("avatar ready: {url} ({} bytes)", bytes.len());
-    cache.insert(url.to_string(), texture.clone());
-    Some(texture)
-}
-
-fn avatar_widget(
-    url: Option<&str>,
-    name: &str,
-    cache: &mut HashMap<String, gdk::Texture>,
-) -> adw::Avatar {
+/// Builds an avatar widget immediately (initials fallback, so there's always something to
+/// show) and, unless the image is already cached, fetches+decodes it in the background so
+/// building a long list of these never blocks the GTK main thread — the window would
+/// otherwise never get a chance to actually present (see git history: it used to fetch
+/// every avatar synchronously before the window existed, which for ~300 friends meant no
+/// window appeared for the better part of a minute).
+fn avatar_widget(url: Option<&str>, name: &str, state: &Rc<RefCell<AppState>>) -> adw::Avatar {
     let avatar = adw::Avatar::new(40, Some(name), true);
-    if let Some(url) = url {
-        let url = avatar_url(url);
-        if let Some(texture) = avatar_texture(&url, cache) {
-            avatar.set_custom_image(Some(&texture));
-        } else {
-            debug!("avatar falling back to initials for {name:?}");
-        }
+
+    let Some(raw_url) = url else {
+        return avatar;
+    };
+    let url = avatar_url(raw_url);
+
+    if let Some(texture) = state.borrow().avatar_cache.get(&url).cloned() {
+        debug!("avatar cache hit: {url}");
+        avatar.set_custom_image(Some(&texture));
+        return avatar;
     }
+
+    debug!("avatar cache miss, fetching async: {url}");
+    let state = state.clone();
+    let avatar_clone = avatar.clone();
+    let fetch_url = url.clone();
+
+    glib::MainContext::default().spawn_local(async move {
+        let bytes = match gio::spawn_blocking(move || fetch_bytes(&fetch_url)).await {
+            Ok(Ok(bytes)) => bytes,
+            Ok(Err(e)) => {
+                warn!("avatar failed to fetch ({url}): {e}");
+                return;
+            }
+            Err(e) => {
+                warn!("avatar fetch task failed ({url}): {e:?}");
+                return;
+            }
+        };
+
+        match gdk::Texture::from_bytes(&glib::Bytes::from(&bytes)) {
+            Ok(texture) => {
+                debug!("avatar ready: {url} ({} bytes)", bytes.len());
+                state.borrow_mut().avatar_cache.insert(url, texture.clone());
+                avatar_clone.set_custom_image(Some(&texture));
+            }
+            Err(e) => warn!("avatar failed to decode ({url}, {} bytes): {e}", bytes.len()),
+        }
+    });
+
     avatar
 }
 
@@ -109,10 +115,7 @@ fn update_card(
     outer.add_css_class("luodingo-card");
 
     let name = card.display_name.as_deref().unwrap_or("Someone").to_string();
-    {
-        let mut st = state.borrow_mut();
-        outer.append(&avatar_widget(card.picture.as_deref(), &name, &mut st.avatar_cache));
-    }
+    outer.append(&avatar_widget(card.picture.as_deref(), &name, state));
 
     let content = gtk::Box::new(gtk::Orientation::Vertical, 4);
     content.set_hexpand(true);
@@ -179,7 +182,7 @@ fn update_card(
     outer
 }
 
-fn friend_row(friend: &Friend, cache: &mut HashMap<String, gdk::Texture>) -> adw::ActionRow {
+fn friend_row(friend: &Friend, state: &Rc<RefCell<AppState>>) -> adw::ActionRow {
     let row = adw::ActionRow::new();
     let name = friend.name.as_deref().unwrap_or(&friend.username);
     let display_name = if friend.has_plus {
@@ -195,7 +198,7 @@ fn friend_row(friend: &Friend, cache: &mut HashMap<String, gdk::Texture>) -> adw
         friend.total_xp,
         if friend.has_recent_activity { " \u{00B7} \u{1F7E2}" } else { "" }
     ));
-    row.add_prefix(&avatar_widget(friend.picture.as_deref(), name, cache));
+    row.add_prefix(&avatar_widget(friend.picture.as_deref(), name, state));
     row
 }
 
@@ -247,19 +250,13 @@ fn render(state: &Rc<RefCell<AppState>>, widgets: &Widgets) {
     }
 
     clear_listbox(&widgets.following_list);
-    {
-        let mut st = state.borrow_mut();
-        for friend in &following {
-            widgets.following_list.append(&friend_row(friend, &mut st.avatar_cache));
-        }
+    for friend in &following {
+        widgets.following_list.append(&friend_row(friend, state));
     }
 
     clear_listbox(&widgets.followers_list);
-    {
-        let mut st = state.borrow_mut();
-        for friend in &followers {
-            widgets.followers_list.append(&friend_row(friend, &mut st.avatar_cache));
-        }
+    for friend in &followers {
+        widgets.followers_list.append(&friend_row(friend, state));
     }
 }
 
