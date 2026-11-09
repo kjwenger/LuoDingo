@@ -15,6 +15,7 @@ There is no supported, documented Duolingo API for third-party apps. Everything 
 ## What's here
 
 - **[`rust/`](rust/README.md)** — a Rust Cargo workspace: a UI-agnostic core (the API client and app state) plus two interchangeable desktop GUI frontends built on top of it — one with [`egui`](https://github.com/emilk/egui) (pure Rust, no system dependencies) and one with GTK4/libadwaita (native GNOME look and feel). See that folder's README for build/run instructions and implementation details.
+- **[`openapi/`](openapi/README.md)** — a reverse-engineered OpenAPI spec for the same endpoints, served as a browsable Swagger UI page via Next.js. Currently just documentation; the plan is to eventually build a web UI here with equivalent functionality to the Rust desktop apps, as a second independent frontend.
 
 ## Credentials
 

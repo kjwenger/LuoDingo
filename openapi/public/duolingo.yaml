@@ -1,0 +1,355 @@
+openapi: 3.0.3
+info:
+  title: Duolingo (Unofficial)
+  version: "0.1.0"
+  description: |
+    Reverse-engineered, **unofficial** description of the Duolingo endpoints used by
+    [LuoDingo](https://github.com/kjwenger/LuoDingo). Duolingo publishes no official
+    public API or specification — everything here was found by inspecting the real
+    web client's network traffic and verified with live requests (see the Rust
+    implementation at `rust/core/src/api.rs` for where each endpoint and field was
+    confirmed).
+
+    Not endorsed by or affiliated with Duolingo. Endpoints and response shapes can
+    change without notice. Intended for personal, read-only use against your own
+    account (plus the one write operation, reacting to a friend's update) — not for
+    scraping other users' data at scale or automating gameplay.
+  contact:
+    name: LuoDingo
+    url: https://github.com/kjwenger/LuoDingo
+
+servers:
+  - url: https://www.duolingo.com
+    description: Same host serves both the dated API versions and the reaction endpoint.
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: profile
+    description: The logged-in user's own profile.
+  - name: friends
+    description: Who you follow and who follows you.
+  - name: feed
+    description: The friends activity feed (league promotions, kudos, follows) and reacting to it.
+
+paths:
+  /2017-06-30/users/{userId}:
+    get:
+      operationId: getProfile
+      tags: [profile]
+      summary: Get a user's profile
+      description: |
+        Used here for the logged-in user's own profile. The full response has many more
+        fields than modeled below (practice settings, notification prefs, etc.) — only
+        the ones LuoDingo actually reads are included.
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: Profile data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Profile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /2017-06-30/users/{userId}/subscriptions:
+    get:
+      operationId: getFollowing
+      tags: [friends]
+      summary: People the given user follows
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: The list of followed users.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  subscriptions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Friend'
+                required: [subscriptions]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /2017-06-30/users/{userId}/subscribers:
+    get:
+      operationId: getFollowers
+      tags: [friends]
+      summary: People who follow the given user
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: The list of followers.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  subscribers:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Friend'
+                required: [subscribers]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /2023-05-23/friends/users/{userId}/feed/v2:
+    get:
+      operationId: getFriendsFeed
+      tags: [feed]
+      summary: The friends activity feed
+      description: |
+        League promotions, kudos-worthy milestones, and follows — what the real app's
+        "Friends" tab shows. Does **not** include every possible action (e.g. an
+        ordinary lesson completion isn't a card unless it triggers a kudos milestone).
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - name: uiLanguage
+          in: query
+          required: true
+          description: Locale for card body text, e.g. "en". LuoDingo always sends "en".
+          schema:
+            type: string
+            example: en
+      responses:
+        '200':
+          description: Feed cards, grouped (LuoDingo flattens and sorts them newest-first).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  experimentsToTreat:
+                    type: array
+                    items: {}
+                  feed:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        feedCards:
+                          type: array
+                          items:
+                            $ref: '#/components/schemas/FeedCard'
+                      required: [feedCards]
+                required: [feed]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /card/reaction:
+    post:
+      operationId: reactToCard
+      tags: [feed]
+      summary: React to a feed card (the real app's "Celebrate"/"FEIERN" button)
+      description: |
+        Verified live: POSTing `reaction: "CONGRATS"` against a card with no existing
+        reaction took it from no `congrats` entry to `reactionCounts: {"congrats": 1}`.
+        Note this path has **no** date-version prefix, unlike every other endpoint here.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                groupId:
+                  type: string
+                  description: The target card's `eventId`.
+                  example: event-id-4fe9568ee0154f8e8239de5cf7093ef8
+                reaction:
+                  type: string
+                  description: |
+                    Verified value: "CONGRATS" (what the Celebrate button sends). Other
+                    uppercase reaction names likely exist (reactionCounts keys seen in
+                    feed data include congrats/like/haha/cheer/high_five/love/support)
+                    but only CONGRATS has been confirmed against the live API.
+                  example: CONGRATS
+                trackingProperties:
+                  type: object
+                  properties:
+                    screen:
+                      type: string
+                      example: kudos_feed
+                userId:
+                  type: integer
+                  format: int64
+                  description: The reacting (logged-in) user's id.
+              required: [groupId, reaction, userId]
+      responses:
+        '200':
+          description: Reaction accepted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  groupId:
+                    type: string
+                  timestamp:
+                    type: integer
+                  counts:
+                    type: object
+                    additionalProperties:
+                      type: integer
+                    example:
+                      CONGRATS: 1
+                  countsBySource:
+                    type: object
+                    description: Counts broken down by the reacting user's relationship (e.g. FOLLOWER).
+                    additionalProperties:
+                      type: object
+                      additionalProperties:
+                        type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        A JWT extracted from a logged-in browser session's `jwt_token` cookie — not
+        obtainable via username/password login, which is bot-gated and returns the
+        web app's HTML shell instead of a token for non-browser clients. See the top
+        -level LuoDingo README for how to extract one.
+
+  parameters:
+    UserId:
+      name: userId
+      in: path
+      required: true
+      description: Numeric Duolingo user id (decodable from the JWT's `sub` claim).
+      schema:
+        type: integer
+        format: int64
+        example: 705970742
+
+  responses:
+    Unauthorized:
+      description: Missing, expired, or invalid JWT.
+
+  schemas:
+    Profile:
+      type: object
+      properties:
+        username:
+          type: string
+        totalXp:
+          type: integer
+        streak:
+          type: integer
+          nullable: true
+      required: [username, totalXp]
+
+    Friend:
+      type: object
+      description: An entry in a subscriptions (following) or subscribers (followers) list.
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+          nullable: true
+          description: Display name. Null for accounts that never set one.
+        username:
+          type: string
+        totalXp:
+          type: integer
+        weeklyXp:
+          type: integer
+        monthlyXp:
+          type: integer
+        hasPlus:
+          type: boolean
+        hasRecentActivity15:
+          type: boolean
+        picture:
+          type: string
+          nullable: true
+          description: |
+            Avatar URL. Sometimes protocol-relative ("//simg-ssl.duolingo.com/...").
+            Always requires a trailing size segment (e.g. "/medium") to actually load —
+            omitting it returns 400 or 403 depending on which avatar host it is.
+      required:
+        - id
+        - username
+        - totalXp
+        - weeklyXp
+        - monthlyXp
+        - hasPlus
+        - hasRecentActivity15
+
+    FeedCard:
+      type: object
+      properties:
+        cardType:
+          type: string
+          enum:
+            - FOLLOW
+            - FOLLOW_BACK
+            - GIFT_SENT
+            - NEWS
+            - KUDOS_MILESTONE
+            - KUDOS_OFFER
+            - SHARE_SENTENCE_OFFER
+        displayName:
+          type: string
+          nullable: true
+        body:
+          type: string
+          nullable: true
+          description: Human-readable achievement text, e.g. "Finished #1 in the Diamond League 31 times!".
+        timestamp:
+          type: integer
+          format: int64
+          description: Unix seconds.
+        userId:
+          type: integer
+          format: int64
+        picture:
+          type: string
+          nullable: true
+          description: Same avatar-URL caveats as Friend.picture.
+        kudosIcon:
+          type: string
+          nullable: true
+          description: |
+            Identifies which badge the real app shows, e.g. "kudos_feed_leaderboard_rank_1"
+            or "kudos_feed_league_promotion_OBSIDIAN". An identifier string, not an image
+            URL — no confirmed URL for the actual badge artwork was found.
+          example: kudos_feed_leaderboard_rank_1
+        eventId:
+          type: string
+          nullable: true
+          description: This card's event id. Required as `groupId` when reacting to it. Absent on cards that can't be reacted to (e.g. FOLLOW).
+        reactionCounts:
+          type: object
+          description: Reaction name -> count. Absent on cards that can't be reacted to; possibly `{}` on ones that can but haven't been yet.
+          additionalProperties:
+            type: integer
+          example:
+            congrats: 45
+        reactionType:
+          type: string
+          nullable: true
+          description: The reaction *the authenticated account* has already left on this card, if any.
+        commentPreview:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: |
+            Present (as null) on kudos-style cards. Its non-null shape is unconfirmed —
+            no card observed during development ever had one, so this is typed as an
+            open object purely so it round-trips; treat any real value as unknown.
+      required: [cardType, timestamp, userId]
