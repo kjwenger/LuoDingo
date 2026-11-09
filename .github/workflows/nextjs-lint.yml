@@ -35,3 +35,10 @@ jobs:
       - name: Validate OpenAPI spec
         working-directory: nextjs
         run: npx @redocly/cli lint public/duolingo.yaml
+
+      - name: Build
+        working-directory: nextjs
+        # No DUOLINGO_JWT_TOKEN secret needed: app/feed/page.tsx is force-dynamic, so
+        # Next.js never attempts the live Duolingo fetch at build time (verified locally
+        # with the var unset before adding this step).
+        run: npm run build

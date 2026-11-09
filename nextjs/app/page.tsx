@@ -13,14 +13,22 @@ export default function Home() {
           >
             LuoDingo
           </a>
-          , plus (eventually) a web UI equivalent to its Rust desktop apps.
+          , plus a web UI with equivalent functionality to its Rust desktop apps.
         </p>
-        <a
-          className="flex h-12 items-center justify-center rounded-full bg-foreground px-6 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
-          href="/docs"
-        >
-          View API docs
-        </a>
+        <div className="flex gap-3">
+          <a
+            className="flex h-12 items-center justify-center rounded-full bg-foreground px-6 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
+            href="/feed"
+          >
+            Open Friend Updates
+          </a>
+          <a
+            className="flex h-12 items-center justify-center rounded-full border border-black/10 px-6 transition-colors hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+            href="/docs"
+          >
+            View API docs
+          </a>
+        </div>
       </main>
     </div>
   );

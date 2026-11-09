@@ -5,20 +5,22 @@
 [![Next.js](https://img.shields.io/badge/Next.js-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 
-A reverse-engineered **OpenAPI 3.0** description of the unofficial Duolingo endpoints LuoDingo uses, served via a [Swagger UI](https://swagger.io/tools/swagger-ui/) page built with [Next.js](https://nextjs.org). See the [top-level README](../README.md) for what LuoDingo is and why the API is "unofficial".
-
-This exists for two reasons:
-
-1. **Documentation** — a browsable, testable reference for the endpoints the [Rust implementation](../rust/README.md) already uses, instead of that knowledge living only in `rust/core/src/api.rs` and this repo's commit history.
-2. **A second frontend, eventually** — once the spec is solid, the plan is to build a web UI here with the same functionality as the Rust `egui`/`adwaita` apps (friend updates feed, Celebrate, etc.), as a second implementation sharing nothing with the Rust one except the API knowledge encoded in the spec.
-
-Today it's just the spec + docs page — no API routes or dashboard yet.
+A reverse-engineered **OpenAPI 3.0** description of the unofficial Duolingo endpoints LuoDingo uses, served via a [Swagger UI](https://swagger.io/tools/swagger-ui/) page, **plus a web UI with equivalent functionality to the Rust `egui`/`adwaita` desktop apps** (friend updates feed, Celebrate/Celebrate All), built with [Next.js](https://nextjs.org). See the [top-level README](../README.md) for what LuoDingo is and why the API is "unofficial". Shares nothing with the Rust implementation except the API knowledge encoded in the spec — independently reimplemented.
 
 ## What's here
 
-- **`public/duolingo.yaml`** — the OpenAPI spec itself. Covers the five endpoints LuoDingo's Rust client calls (profile, following, followers, the friends activity feed, reacting to a feed card), plus a few more found cheap (read-only) to verify live: the full profile shape, richer feed-card fields, the feed response's `kudosConfig`/`newsConfig`/`sentenceConfig` (which reactions are valid per card category), and a newer paginated following/followers endpoint. One write endpoint (`follow`) is documented from reading a third-party client's source only, never called — see below. Served statically at `/duolingo.yaml` (anything under `public/` is served at the site root by Next.js).
-- **`app/docs/`** — the Swagger UI page at `/docs`, pointed at that spec file. Forces a light background on itself (`SwaggerDocs.tsx`) regardless of system/browser dark-mode preference — `swagger-ui-react` sets its own dark text colors but no background of its own, so without this it rendered as dark-on-near-black (our global dark-mode CSS) and looked completely blank under a dark color scheme. Found with `scripts/check-page.mjs` (see **Debugging**), since it wasn't reproducible by just glancing at `next build` output or testing in a light-mode browser.
-- **`app/page.tsx`** — a minimal landing page linking to `/docs`.
+- **`public/duolingo.yaml`** — the OpenAPI spec. Served statically at `/duolingo.yaml`; browsable at `/docs` via Swagger UI (`app/docs/`).
+- **`lib/duolingo/`** — server-only Duolingo client (`client.ts`, `import "server-only"`), plain TS types (`types.ts`), and pure formatting helpers (`format.ts`) mirroring `rust/core/src/{api,format}.rs` field-for-field and quirk-for-quirk (avatar URL `/medium` suffix, `CONGRATS` reaction value, `kudosIcon`-not-`triggerType` for badges).
+- **`app/feed/`** — the friend-updates UI at `/feed`. `page.tsx` is a Server Component (`export const dynamic = "force-dynamic"`) that fetches feed/following/followers in parallel and keeps partial results on partial failure (mirrors `controller.rs::refresh()`); `actions.ts` has the two Server Actions (`celebrateAction`, `celebrateAllAction`) that call Duolingo then `revalidatePath("/feed")`; `FeedView.tsx` is the Client Component (tabs, cards, buttons).
+- **`app/page.tsx`** — landing page linking to `/feed` and `/docs`.
+
+## Why `cacheComponents` is off
+
+`next.config.ts` had `cacheComponents: true` (Next 16's default from `create-next-app`). Under it, a Server Component reading live/uncached data **must** sit behind a `<Suspense>` boundary — a build error otherwise, not a warning. That machinery exists for multi-tenant apps caching per-session data; we have one account/JWT and want every read live with zero caching. Turned it off and used the classic model instead (`force-dynamic`, Server Actions, uncached `fetch` by default) — simpler and a better fit, with no loss since `/docs` doesn't read dynamic data either way.
+
+## Credentials
+
+Copy `.env.local.example` to `.env.local` and fill in `DUOLINGO_JWT_TOKEN` (same value as `rust/.env`'s — see the top-level README's **Credentials** section for how to extract one). It's read server-only (`lib/duolingo/client.ts` imports `"server-only"`) and never reaches the browser. `.env*` is already gitignored. No `npm run build`/CI needs it set — `/feed` is `force-dynamic`, so no live fetch is attempted at build time.
 
 ## Why the spec looks the way it does
 
