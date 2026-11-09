@@ -1,7 +1,7 @@
 //! Fetches and holds the app's data. Every frontend owns one `Controller` and
 //! reads its fields; none of this depends on any particular UI toolkit.
 
-use crate::api::{Client, FeedCard, Friend};
+use crate::api::{Client, FeedCard, Friend, CELEBRATE_REACTION};
 
 pub struct Controller {
     client: Client,
@@ -47,6 +47,24 @@ impl Controller {
                 self.followers = friends;
             }
             Err(e) => self.error = Some(format!("followers: {e}")),
+        }
+    }
+
+    /// Sends a "Celebrate" reaction for the given update and, on success, updates that
+    /// card's counts locally so the UI reflects it immediately without a full refresh.
+    pub fn celebrate(&mut self, event_id: &str) {
+        match self.client.react(event_id, CELEBRATE_REACTION) {
+            Ok(()) => {
+                if let Some(card) = self
+                    .updates
+                    .iter_mut()
+                    .find(|c| c.event_id.as_deref() == Some(event_id))
+                {
+                    *card.reaction_counts.entry("congrats".to_string()).or_insert(0) += 1;
+                    card.reaction_type = Some("congrats".to_string());
+                }
+            }
+            Err(e) => self.error = Some(format!("celebrate: {e}")),
         }
     }
 }

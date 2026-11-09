@@ -5,6 +5,25 @@ use std::env;
 const API_BASE: &str = "https://www.duolingo.com/2017-06-30";
 const FRIENDS_API_BASE: &str = "https://www.duolingo.com/2023-05-23";
 
+/// The reaction value the real app's "Celebrate" (FEIERN) button sends. Verified live:
+/// posting this to a zero-reaction card made it show up as `reactionCounts: {"congrats": 1}`.
+pub const CELEBRATE_REACTION: &str = "CONGRATS";
+
+/// Downloads raw bytes from a public URL (e.g. an avatar image). Unauthenticated — avatar
+/// CDN assets don't need the JWT. Frontends that can't load images by URL themselves
+/// (unlike egui's built-in loaders) decode these bytes with their own toolkit.
+pub fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
+    let response =
+        reqwest::blocking::get(url).map_err(|e| format!("request to {url} failed: {e}"))?;
+    if !response.status().is_success() {
+        return Err(format!("GET {url} returned HTTP {}", response.status()));
+    }
+    response
+        .bytes()
+        .map(|b| b.to_vec())
+        .map_err(|e| format!("failed to read response body from {url}: {e}"))
+}
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct Profile {
     pub username: String,
@@ -28,6 +47,8 @@ pub struct Friend {
     pub has_plus: bool,
     #[serde(rename = "hasRecentActivity15")]
     pub has_recent_activity: bool,
+    #[serde(default)]
+    pub picture: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -51,10 +72,26 @@ pub struct FeedCard {
     pub timestamp: i64,
     #[serde(rename = "userId")]
     pub user_id: u64,
+    /// The friend's avatar image URL, when they've customized one.
+    #[serde(default)]
+    pub picture: Option<String>,
+    /// Identifies which badge/icon the real app shows for this card, e.g.
+    /// "kudos_feed_leaderboard_rank_1" or "kudos_feed_league_promotion_OBSIDIAN".
+    /// Not an image URL itself — see `format::badge`.
+    #[serde(rename = "kudosIcon", default)]
+    pub kudos_icon: Option<String>,
+    /// Identifies this specific event; required as `groupId` when reacting to the card
+    /// via `Client::react`. Absent on cards that can't be reacted to (e.g. FOLLOW).
+    #[serde(rename = "eventId", default)]
+    pub event_id: Option<String>,
     /// Reaction name (e.g. "congrats", "love") -> count. Absent on cards that can't be
     /// reacted to (e.g. FOLLOW), and possibly empty on ones that can but haven't been yet.
     #[serde(rename = "reactionCounts", default)]
     pub reaction_counts: BTreeMap<String, u64>,
+    /// The reaction *this* account has already left on the card, if any (lowercase, e.g.
+    /// "congrats"). Used to show the Celebrate button as already-pressed.
+    #[serde(rename = "reactionType", default)]
+    pub reaction_type: Option<String>,
     /// Present (possibly null) on kudos-style cards. Its non-null shape is unconfirmed, since
     /// no card observed so far has had any comments.
     #[serde(rename = "commentPreview", default)]
@@ -121,6 +158,32 @@ impl Client {
         let mut cards: Vec<FeedCard> = resp.feed.into_iter().flat_map(|g| g.feed_cards).collect();
         cards.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
         Ok(cards)
+    }
+
+    /// React to a feed card (e.g. the real app's "Celebrate" button sends `"CONGRATS"`).
+    /// Verified live against the real API: a zero-reaction card went from no `congrats`
+    /// entry to `{"congrats": 1}` after calling this with `reaction = "CONGRATS"`.
+    pub fn react(&self, event_id: &str, reaction: &str) -> Result<(), String> {
+        let url = "https://www.duolingo.com/card/reaction";
+        let body = serde_json::json!({
+            "groupId": event_id,
+            "reaction": reaction,
+            "trackingProperties": { "screen": "kudos_feed" },
+            "userId": self.user_id,
+        });
+
+        let response = self
+            .http
+            .post(url)
+            .bearer_auth(&self.jwt)
+            .json(&body)
+            .send()
+            .map_err(|e| format!("request to {url} failed: {e}"))?;
+
+        if !response.status().is_success() {
+            return Err(format!("Duolingo API returned HTTP {} for {url}", response.status()));
+        }
+        Ok(())
     }
 
     fn get<T: serde::de::DeserializeOwned>(&self, url: &str) -> Result<T, String> {

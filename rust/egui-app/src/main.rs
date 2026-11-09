@@ -1,6 +1,14 @@
 use eframe::egui;
-use luodingo_core::format::{comment_indicator, humanize_timestamp, reactions_summary};
+use luodingo_core::format::{
+    self, comment_indicator, humanize_timestamp, normalize_avatar_url, reactions_summary,
+};
 use luodingo_core::{Controller, FeedCard, Friend};
+
+// Approximate Duolingo dark-theme palette (not pixel-matched to the real site).
+const BG: egui::Color32 = egui::Color32::from_rgb(0x13, 0x1F, 0x24);
+const CARD_BG: egui::Color32 = egui::Color32::from_rgb(0x1F, 0x2D, 0x35);
+const ACCENT_GREEN: egui::Color32 = egui::Color32::from_rgb(0x58, 0xCC, 0x02);
+const MUTED: egui::Color32 = egui::Color32::from_gray(0x8A);
 
 #[derive(PartialEq, Clone, Copy)]
 enum Tab {
@@ -22,42 +30,106 @@ impl App {
         }
     }
 
-    fn updates_list(ui: &mut egui::Ui, cards: &[FeedCard]) {
+    fn avatar(ui: &mut egui::Ui, picture: Option<&str>, size: f32) {
+        if let Some(url) = picture {
+            ui.add(
+                egui::Image::new(normalize_avatar_url(url))
+                    .fit_to_exact_size(egui::vec2(size, size))
+                    .corner_radius((size / 2.0) as u8),
+            );
+        } else {
+            let (rect, _) = ui.allocate_exact_size(egui::vec2(size, size), egui::Sense::hover());
+            ui.painter().circle_filled(rect.center(), size / 2.0, MUTED);
+        }
+    }
+
+    fn badge(ui: &mut egui::Ui, badge: &format::Badge, size: f32) {
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(size, size), egui::Sense::hover());
+        let color = egui::Color32::from_rgb(badge.color.r, badge.color.g, badge.color.b);
+        ui.painter().circle_filled(rect.center(), size / 2.0, color);
+        ui.painter().text(
+            rect.center(),
+            egui::Align2::CENTER_CENTER,
+            &badge.glyph,
+            egui::FontId::proportional(size * 0.5),
+            egui::Color32::BLACK,
+        );
+    }
+
+    /// Renders the Updates tab as cards; returns the event id to celebrate, if the
+    /// Celebrate button was clicked this frame.
+    fn updates_list(ui: &mut egui::Ui, cards: &[FeedCard]) -> Option<String> {
         if cards.is_empty() {
             ui.label("No recent friend updates.");
-            return;
+            return None;
         }
+
+        let mut to_celebrate = None;
 
         for card in cards {
-            ui.horizontal_wrapped(|ui| {
-                let name = card.display_name.as_deref().unwrap_or("Someone");
-                ui.strong(name);
-                ui.label(card.body.as_deref().unwrap_or(card.card_type.as_str()));
-            });
+            egui::Frame::new()
+                .fill(CARD_BG)
+                .corner_radius(10)
+                .inner_margin(12.0)
+                .outer_margin(egui::Margin::symmetric(0, 6))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        Self::avatar(ui, card.picture.as_deref(), 44.0);
 
-            ui.horizontal(|ui| {
-                let meta = egui::RichText::new(humanize_timestamp(card.timestamp))
-                    .small()
-                    .color(egui::Color32::GRAY);
-                ui.label(meta);
+                        ui.vertical(|ui| {
+                            ui.set_width(ui.available_width() - 48.0);
 
-                if !card.reaction_counts.is_empty() {
-                    let text = egui::RichText::new(format!("· {}", reactions_summary(card)))
-                        .small()
-                        .color(egui::Color32::GRAY);
-                    ui.label(text);
-                }
+                            ui.horizontal(|ui| {
+                                let name = card.display_name.as_deref().unwrap_or("Someone");
+                                ui.strong(name);
+                                ui.label(
+                                    egui::RichText::new(humanize_timestamp(card.timestamp))
+                                        .small()
+                                        .color(MUTED),
+                                );
 
-                if let Some(comments) = comment_indicator(card) {
-                    let text = egui::RichText::new(format!("· {comments}"))
-                        .small()
-                        .color(egui::Color32::GRAY);
-                    ui.label(text);
-                }
-            });
+                                if let Some(b) = format::badge(card) {
+                                    ui.with_layout(
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| Self::badge(ui, &b, 24.0),
+                                    );
+                                }
+                            });
 
-            ui.separator();
+                            ui.label(card.body.as_deref().unwrap_or(card.card_type.as_str()));
+
+                            ui.horizontal(|ui| {
+                                if let Some(event_id) = &card.event_id {
+                                    let already = card.reaction_type.is_some();
+                                    let label = if already {
+                                        "\u{1F389} Celebrated"
+                                    } else {
+                                        "\u{1F389} Celebrate"
+                                    };
+                                    if ui.add_enabled(!already, egui::Button::new(label)).clicked()
+                                    {
+                                        to_celebrate = Some(event_id.clone());
+                                    }
+                                }
+
+                                if !card.reaction_counts.is_empty() {
+                                    ui.label(
+                                        egui::RichText::new(reactions_summary(card))
+                                            .small()
+                                            .color(MUTED),
+                                    );
+                                }
+
+                                if let Some(comments) = comment_indicator(card) {
+                                    ui.label(egui::RichText::new(comments).small().color(MUTED));
+                                }
+                            });
+                        });
+                    });
+                });
         }
+
+        to_celebrate
     }
 
     fn friends_table(ui: &mut egui::Ui, friends: &[Friend]) {
@@ -65,6 +137,7 @@ impl App {
 
         TableBuilder::new(ui)
             .striped(true)
+            .column(Column::auto().at_least(36.0))
             .column(Column::remainder().at_least(140.0))
             .column(Column::auto().at_least(120.0))
             .column(Column::auto().at_least(80.0))
@@ -72,6 +145,7 @@ impl App {
             .column(Column::auto().at_least(80.0))
             .column(Column::auto().at_least(60.0))
             .header(22.0, |mut header| {
+                header.col(|_ui| {});
                 header.col(|ui| {
                     ui.strong("Name");
                 });
@@ -92,9 +166,12 @@ impl App {
                 });
             })
             .body(|body| {
-                body.rows(20.0, friends.len(), |mut row| {
+                body.rows(32.0, friends.len(), |mut row| {
                     let friend = &friends[row.index()];
                     let display_name = friend.name.as_deref().unwrap_or(&friend.username);
+                    row.col(|ui| {
+                        Self::avatar(ui, friend.picture.as_deref(), 28.0);
+                    });
                     row.col(|ui| {
                         ui.label(if friend.has_plus {
                             format!("{display_name} \u{1F48E}")
@@ -124,10 +201,10 @@ impl App {
 
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        let panel_frame = egui::Frame::central_panel(&ui.style().clone());
+        let panel_frame = egui::Frame::central_panel(&ui.style().clone()).fill(BG);
         panel_frame.show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.heading("LuoDingo");
+                ui.heading(egui::RichText::new("LuoDingo").color(ACCENT_GREEN));
                 if ui.button("Refresh").clicked() {
                     self.controller.refresh();
                 }
@@ -159,11 +236,16 @@ impl eframe::App for App {
 
             ui.separator();
 
+            let mut to_celebrate = None;
             egui::ScrollArea::vertical().show(ui, |ui| match self.tab {
-                Tab::Updates => Self::updates_list(ui, &self.controller.updates),
+                Tab::Updates => to_celebrate = Self::updates_list(ui, &self.controller.updates),
                 Tab::Following => Self::friends_table(ui, &self.controller.following),
                 Tab::Followers => Self::friends_table(ui, &self.controller.followers),
             });
+
+            if let Some(event_id) = to_celebrate {
+                self.controller.celebrate(&event_id);
+            }
         });
     }
 }
@@ -180,6 +262,10 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "LuoDingo - Friend Updates",
         eframe::NativeOptions::default(),
-        Box::new(|_cc| Ok(Box::new(App::new(controller)))),
+        Box::new(|cc| {
+            egui_extras::install_image_loaders(&cc.egui_ctx);
+            cc.egui_ctx.set_visuals(egui::Visuals::dark());
+            Ok(Box::new(App::new(controller)))
+        }),
     )
 }

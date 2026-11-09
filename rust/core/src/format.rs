@@ -47,6 +47,64 @@ pub fn comment_indicator(card: &FeedCard) -> Option<String> {
     })
 }
 
+/// Some avatar URLs come back protocol-relative (`//simg-ssl.duolingo.com/...`); browsers
+/// resolve that against the page's own scheme, but a standalone HTTP client needs it explicit.
+pub fn normalize_avatar_url(url: &str) -> String {
+    if let Some(rest) = url.strip_prefix("//") {
+        format!("https://{rest}")
+    } else {
+        url.to_string()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BadgeColor {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+}
+
+/// A small badge to draw over/next to a feed card's avatar, derived from `kudosIcon`.
+/// Not real Duolingo artwork (we never found a confirmed icon-image URL) — just a
+/// glyph+color standing in for it, consistent across every frontend.
+#[derive(Debug, Clone)]
+pub struct Badge {
+    pub glyph: String,
+    pub color: BadgeColor,
+}
+
+const GOLD: BadgeColor = BadgeColor { r: 0xE8, g: 0xB4, b: 0x23 };
+const SILVER: BadgeColor = BadgeColor { r: 0xB0, g: 0xB8, b: 0xC1 };
+const BRONZE: BadgeColor = BadgeColor { r: 0xC9, g: 0x7A, b: 0x3F };
+const NEUTRAL: BadgeColor = BadgeColor { r: 0x6B, g: 0x7A, b: 0x88 };
+
+/// None when the card has no badge-worthy `kudosIcon` (e.g. plain FOLLOW cards).
+pub fn badge(card: &FeedCard) -> Option<Badge> {
+    let icon = card.kudos_icon.as_deref()?;
+
+    Some(if let Some(rank) = icon.strip_prefix("kudos_feed_leaderboard_rank_") {
+        let color = match rank {
+            "1" => GOLD,
+            "2" => SILVER,
+            "3" => BRONZE,
+            _ => NEUTRAL,
+        };
+        Badge { glyph: rank.to_string(), color }
+    } else if icon.contains("league_promotion") {
+        Badge { glyph: "\u{2B06}".to_string(), color: GOLD } // ⬆
+    } else if icon.contains("streak_milestone") {
+        Badge { glyph: "\u{1F525}".to_string(), color: BRONZE } // 🔥
+    } else if icon.contains("sharpshooter") {
+        Badge { glyph: "\u{1F3AF}".to_string(), color: NEUTRAL } // 🎯
+    } else if icon.contains("resurrection") {
+        Badge { glyph: "\u{1F44B}".to_string(), color: NEUTRAL } // 👋
+    } else if icon.contains("friends_quest") {
+        Badge { glyph: "\u{1F91D}".to_string(), color: NEUTRAL } // 🤝
+    } else {
+        Badge { glyph: "\u{2B50}".to_string(), color: NEUTRAL } // ⭐
+    })
+}
+
 pub fn humanize_timestamp(ts: i64) -> String {
     use chrono::{Local, TimeZone};
 
