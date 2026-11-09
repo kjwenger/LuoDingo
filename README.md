@@ -1,1 +1,29 @@
 # LuoDingo
+
+LuoDingo is a personal toolkit for working with your own [Duolingo](https://www.duolingo.com) account data through Duolingo's **unofficial** REST API. Duolingo doesn't publish a public API, but the endpoints its own web and mobile clients use can be called directly once you're authenticated as yourself.
+
+Today that means pulling your profile stats and seeing XP/activity updates for the people you follow and the people who follow you (a lightweight stand-in for Duolingo's in-app "Friends" feed). The project isn't tied to any particular language or UI — the `rust/` folder holds the current implementation, but the ideas here (auth, endpoints, data shape) apply to any client you might build on top of them.
+
+## Why "unofficial"?
+
+There is no supported, documented Duolingo API for third-party apps. Everything here talks to the same endpoints Duolingo's own web client uses (`https://www.duolingo.com/2017-06-30/...`). That means:
+
+- Endpoints and fields can change or disappear without notice.
+- Duolingo's Terms of Service govern what you're allowed to do with your account and its data — this project is for personal, read-only use against your own account, not for scraping other users' data at scale or automating gameplay.
+- Programmatic username/password login is bot-gated and does not work; see **Credentials** below for the approach that does.
+
+## What's here
+
+- **[`rust/`](rust/README.md)** — a Rust client with a small `egui`-based desktop window showing your friends' and followers' XP stats. See that folder's README for build/run instructions and implementation details.
+
+## Credentials
+
+LuoDingo authenticates using a **JWT token** copied out of a browser session, not your Duolingo password. Duolingo's `/login` endpoint no longer returns a usable token for non-browser clients, so the practical approach is:
+
+1. Log into [duolingo.com](https://www.duolingo.com) in your browser as normal.
+2. Open your browser's developer tools (F12), go to the **Storage**/**Application** tab, and find the `jwt_token` cookie under `https://www.duolingo.com`.
+3. Copy its value into your local `.env` file (see `rust/.env.example` for the expected format — copy it to `rust/.env` and fill in `DUOLINGO_JWT_TOKEN`).
+
+This JWT encodes your Duolingo user ID and, in practice, doesn't expire on its own — but it **will** stop working if you change your Duolingo password, at which point you'll need to extract a fresh one.
+
+**Never commit `.env`.** It already is covered by `.gitignore` at the repo root, but double-check before pushing if you ever restructure the project. Treat the JWT like a password: anyone with it can act as you against the Duolingo API.
