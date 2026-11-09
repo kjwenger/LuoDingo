@@ -40,9 +40,8 @@ paths:
       tags: [profile]
       summary: Get a user's profile
       description: |
-        Used here for the logged-in user's own profile. The full response has many more
-        fields than modeled below (practice settings, notification prefs, etc.) — only
-        the ones LuoDingo actually reads are included.
+        Used here for the logged-in user's own profile. See `Profile` for which fields
+        of the (much larger) real response are actually modeled.
       parameters:
         - $ref: '#/components/parameters/UserId'
       responses:
@@ -101,6 +100,100 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /2023-05-23/friends/users/{userId}/following:
+    get:
+      operationId: getFollowingV2
+      tags: [friends]
+      summary: People the given user follows (newer, richer endpoint)
+      description: |
+        A second, newer following endpoint, distinct from `/2017-06-30/.../subscriptions`
+        above — confirmed live, works fine, and returns richer per-user data
+        (`isFollowedBy`/`isFollowing` mutual-follow status, `isCurrentlyActive`,
+        `hasSubscription`, a `userScore`) but drops `weeklyXp`/`monthlyXp`, which the
+        older endpoint has and this project's Rust client actually uses — that's the
+        only reason it isn't what's used today. Genuinely paginated (see `cursor`
+        below), unlike the older endpoint.
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - name: pageAfter
+          in: query
+          description: |
+            Cursor from a previous response's `cursor` field, to fetch the next page.
+            Unconfirmed: the one account this was tested against has few enough
+            following/followers that `cursor` always came back null (everything fit in
+            one page), so paging behavior itself was never actually exercised — only
+            the single-page response shape is confirmed. Parameter name is carried over
+            from reading a third-party client's source, not found independently.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The list of followed users, one page.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  following:
+                    $ref: '#/components/schemas/FriendPage'
+                required: [following]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /2023-05-23/friends/users/{userId}/followers:
+    get:
+      operationId: getFollowersV2
+      tags: [friends]
+      summary: People who follow the given user (newer, richer endpoint)
+      description: Same relationship to `/2017-06-30/.../subscribers` as `/following` above has to `/subscriptions` — see that endpoint's description.
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - name: pageAfter
+          in: query
+          description: See the equivalent parameter on GET .../following — same caveats.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The list of followers, one page.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  followers:
+                    $ref: '#/components/schemas/FriendPage'
+                required: [followers]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /2023-05-23/friends/users/{userId}/follow/{targetUserId}:
+    post:
+      operationId: followUser
+      tags: [friends]
+      summary: Follow a user
+      description: |
+        **Not verified live** — unlike everything else in this spec, this was never
+        actually called. Calling it changes a real relationship visible to the other
+        account (and would need a specific, consenting target to test against), which
+        didn't seem appropriate to do just to document an endpoint. Documented purely
+        from reading a third-party reverse-engineered client's source; treat the shape
+        below as a reasonable guess, not a confirmed fact.
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - name: targetUserId
+          in: path
+          required: true
+          description: The user id to follow.
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Unconfirmed response shape.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   /2023-05-23/friends/users/{userId}/feed/v2:
     get:
       operationId: getFriendsFeed
@@ -121,7 +214,11 @@ paths:
             example: en
       responses:
         '200':
-          description: Feed cards, grouped (LuoDingo flattens and sorts them newest-first).
+          description: |
+            Feed cards, grouped (LuoDingo flattens and sorts them newest-first). No
+            pagination parameter was found on this endpoint or in its response — every
+            card available appears to come back in one shot; querying further history
+            doesn't look supported.
           content:
             application/json:
               schema:
@@ -135,11 +232,41 @@ paths:
                     items:
                       type: object
                       properties:
+                        sectionHeader:
+                          type: string
+                          description: Grouping label the real UI shows above these cards, e.g. "Earlier".
                         feedCards:
                           type: array
                           items:
                             $ref: '#/components/schemas/FeedCard'
                       required: [feedCards]
+                  feedMetadata:
+                    type: object
+                    properties:
+                      showRedDot:
+                        type: boolean
+                  kudosConfig:
+                    allOf:
+                      - $ref: '#/components/schemas/FeedConfig'
+                    description: |
+                      Valid reactions for KUDOS_OFFER/KUDOS_MILESTONE cards. Confirmed live —
+                      reactionType values seen: congrats, high_five, support, cheer, love. Only
+                      "congrats" (sent as "CONGRATS") has actually been POST-verified against
+                      /card/reaction; the other four are documented here as found, not
+                      individually confirmed.
+                  newsConfig:
+                    allOf:
+                      - $ref: '#/components/schemas/FeedConfig'
+                    description: |
+                      Valid reactions for NEWS cards. Confirmed live — reactionType values seen:
+                      haha, like, love (default "like"). Not POST-verified.
+                  sentenceConfig:
+                    allOf:
+                      - $ref: '#/components/schemas/FeedConfig'
+                    description: |
+                      Valid reactions for SHARE_SENTENCE_OFFER cards. Confirmed live — identical
+                      to newsConfig in the one account tested (haha, like, love; default "like").
+                      Not POST-verified.
                 required: [feed]
         '401':
           $ref: '#/components/responses/Unauthorized'
@@ -167,10 +294,14 @@ paths:
                 reaction:
                   type: string
                   description: |
-                    Verified value: "CONGRATS" (what the Celebrate button sends). Other
-                    uppercase reaction names likely exist (reactionCounts keys seen in
-                    feed data include congrats/like/haha/cheer/high_five/love/support)
-                    but only CONGRATS has been confirmed against the live API.
+                    Verified value: "CONGRATS" (what the Celebrate button sends; took a
+                    card from no reaction to reactionCounts: {"congrats": 1}). The feed
+                    response's kudosConfig/newsConfig/sentenceConfig (see
+                    GET .../feed/v2) list the other valid reactionType values per card
+                    category — congrats, high_five, support, cheer, love for kudos
+                    cards; haha, like, love for news/sentence cards — uppercased here by
+                    the same convention CONGRATS follows, but none of those others have
+                    actually been POST-verified.
                   example: CONGRATS
                 trackingProperties:
                   type: object
@@ -241,15 +372,94 @@ components:
   schemas:
     Profile:
       type: object
+      description: |
+        The real response has 100+ fields — notification preferences, payment methods,
+        experiment flags, and other app-settings noise that nothing here reads. Only a
+        useful subset is modeled; the rest round-trips fine through a loosely-typed
+        client, it's just not documented. Confirmed live against a real account
+        (example values below are illustrative placeholders, not the fetched account's
+        actual data).
       properties:
+        id:
+          type: integer
+          format: int64
         username:
           type: string
+        name:
+          type: string
+          description: Display name.
+        bio:
+          type: string
+        picture:
+          type: string
+          nullable: true
+          description: Same avatar-URL caveats as Friend.picture.
         totalXp:
+          type: integer
+        weeklyXp:
+          type: integer
+        monthlyXp:
           type: integer
         streak:
           type: integer
           nullable: true
-      required: [username, totalXp]
+        longestStreak:
+          type: integer
+        streakData:
+          type: object
+          description: Richer streak info (current streak length/dates, freeze status, etc.) — not modeled field-by-field.
+          additionalProperties: true
+        xpGoal:
+          type: integer
+          description: Daily XP goal.
+        xpGoalMetToday:
+          type: boolean
+        gems:
+          type: integer
+        lingots:
+          type: integer
+          description: Legacy currency name for the same thing `gems` is now.
+        hasPlus:
+          type: boolean
+        plusStatus:
+          type: string
+          example: PLUS
+        subscriberLevel:
+          type: string
+          example: PREMIUM
+        creationDate:
+          type: integer
+          format: int64
+          description: Account creation time, Unix seconds.
+        timezone:
+          type: string
+          example: Europe/Berlin
+        fromLanguage:
+          type: string
+          description: UI language.
+          example: en
+        learningLanguage:
+          type: string
+          description: Currently-active course's target language.
+          example: es
+        currentCourseId:
+          type: string
+          example: DUOLINGO_ES_EN
+        currentCourse:
+          type: object
+          description: The active course's full state (path, assignments, etc.) — not modeled field-by-field.
+          additionalProperties: true
+        courses:
+          type: array
+          description: Every course the account has started.
+          items:
+            type: object
+            additionalProperties: true
+        health:
+          type: object
+          description: The hearts/lives system state.
+          additionalProperties: true
+      required: [id, username, totalXp]
 
     Friend:
       type: object
@@ -289,6 +499,70 @@ components:
         - monthlyXp
         - hasPlus
         - hasRecentActivity15
+
+    FriendPage:
+      type: object
+      description: Response envelope for the newer GET .../following and .../followers endpoints.
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Pass as `pageAfter` to fetch the next page; null means no more pages (or, unconfirmed, possibly just "this account's list fits in one page" — true multi-page behavior was never exercised).
+        totalUsers:
+          type: integer
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/FriendSummary'
+      required: [users]
+
+    FriendSummary:
+      type: object
+      description: A user entry from the newer GET .../following or .../followers endpoints — richer than Friend, but missing weeklyXp/monthlyXp, which is why this project's Rust client uses the older endpoint (Friend) instead.
+      properties:
+        userId:
+          type: integer
+          format: int64
+        username:
+          type: string
+        displayName:
+          type: string
+          nullable: true
+        totalXp:
+          type: integer
+        picture:
+          type: string
+          nullable: true
+          description: Same avatar-URL caveats as Friend.picture.
+        isVerified:
+          type: boolean
+        isFollowing:
+          type: boolean
+          description: Whether the authenticated account follows this user.
+        isFollowedBy:
+          type: boolean
+          description: Whether this user follows the authenticated account back.
+        isCurrentlyActive:
+          type: boolean
+        canFollow:
+          type: boolean
+        hasSubscription:
+          type: boolean
+          description: Duolingo Plus/Super equivalent of Friend.hasPlus.
+        subscriptionItemType:
+          type: string
+          nullable: true
+          example: premium_subscription
+        userScore:
+          type: object
+          nullable: true
+          description: Per-course leaderboard-style score. Not modeled field-by-field.
+          additionalProperties: true
+        builtAvatarState:
+          type: object
+          description: See FeedCard.builtAvatarState — not modeled field-by-field.
+          additionalProperties: true
+      required: [userId, username, totalXp]
 
     FeedCard:
       type: object
@@ -344,6 +618,10 @@ components:
           type: string
           nullable: true
           description: The reaction *the authenticated account* has already left on this card, if any.
+        defaultReaction:
+          type: string
+          nullable: true
+          description: The reaction type a bare click/tap sends (matches the card type's `*Config.defaultReaction` in the feed response), e.g. "like" for NEWS/SHARE_SENTENCE_OFFER cards.
         commentPreview:
           type: object
           nullable: true
@@ -352,4 +630,133 @@ components:
             Present (as null) on kudos-style cards. Its non-null shape is unconfirmed —
             no card observed during development ever had one, so this is typed as an
             open object purely so it round-trips; treat any real value as unknown.
+        cardId:
+          type: string
+          nullable: true
+        milestoneId:
+          type: string
+          nullable: true
+          description: Equal to `eventId` on every card observed so far.
+        tier:
+          type: integer
+          nullable: true
+          description: |
+            A number tied to the achievement (e.g. the streak length for
+            streak_milestone, the count for top_three/friends_quest_streak). Its exact
+            meaning depends on `triggerType` and isn't modeled per-type here.
+        triggerType:
+          type: string
+          nullable: true
+          description: |
+            What caused this card, e.g. "top_three", "league_promotion",
+            "streak_milestone", "sharpshooter", "resurrection", "friends_quest_streak".
+            Confirmed misleading for medal choice: both "Finished #1" and "Finished top
+            3" cards had triggerType "top_three" — use `kudosIcon`, not this, to pick a
+            badge.
+        notificationType:
+          type: string
+          nullable: true
+          example: OFFER
+        isVerified:
+          type: boolean
+        isAntiKudos:
+          type: boolean
+          nullable: true
+        isInteractionEnabled:
+          type: boolean
+          nullable: true
+        isSuggested:
+          type: boolean
+          nullable: true
+        showRedDot:
+          type: boolean
+          nullable: true
+        learningLanguage:
+          type: string
+          nullable: true
+        learningLanguageAbbrev:
+          type: string
+          nullable: true
+        fromLanguage:
+          type: string
+          nullable: true
+        header:
+          type: string
+          nullable: true
+        subtitle:
+          type: string
+          nullable: true
+        shareId:
+          type: string
+          nullable: true
+        followContextTrackingType:
+          type: string
+          nullable: true
+        characterIcon:
+          type: string
+          nullable: true
+        builtAvatarState:
+          type: object
+          nullable: true
+          description: The avatar customization state behind `picture` (body/hair/clothing option ids). Not modeled field-by-field — nothing here needs it since `picture` is already a renderable URL.
+          additionalProperties: true
+        avatarTapAction:
+          description: Unconfirmed shape (no declared type — could be anything) — always null on every card observed so far.
+        chessFriendPvpPartner:
+          description: Unconfirmed shape (no declared type — could be anything) — always null on every card observed so far.
+        friendStreakPartner:
+          description: Unconfirmed shape (no declared type — could be anything) — always null on every card observed so far.
+        friendsQuestPartner:
+          description: Unconfirmed shape (no declared type — could be anything) — always null on every card observed so far.
+        numPartners:
+          type: integer
+          nullable: true
+        shareCard:
+          description: Unconfirmed shape (no declared type — could be anything) — always null on every card observed so far.
+        suggestionReason:
+          type: string
+          nullable: true
+        suggestionScores:
+          type: object
+          nullable: true
+          additionalProperties: true
+        fromSentence:
+          type: string
+          nullable: true
+          description: Seen on SHARE_SENTENCE_OFFER cards.
+        toSentence:
+          type: string
+          nullable: true
+          description: Seen on SHARE_SENTENCE_OFFER cards.
+        sentence_id:
+          description: Unconfirmed shape (no declared type — could be anything) — always null on every card observed so far, despite the sibling fromSentence/toSentence fields being populated on SHARE_SENTENCE_OFFER cards.
       required: [cardType, timestamp, userId]
+
+    ReactionOption:
+      type: object
+      description: One entry in a *Config.reactions list (see FeedResponse) — describes a reaction button the real UI would show for that card category.
+      properties:
+        reactionType:
+          type: string
+          description: The value to uppercase and send as `reaction` in POST /card/reaction.
+        reactionLabel:
+          type: string
+          description: Button label before reacting, e.g. "CELEBRATE".
+        reactionSentLabel:
+          type: string
+          description: Button label after reacting, e.g. "CELEBRATED".
+        reactionHoverAsset:
+          type: string
+
+    FeedConfig:
+      type: object
+      description: Which reactions are valid for a category of card, and the default one a bare click sends.
+      properties:
+        defaultReaction:
+          type: string
+        shareLabel:
+          type: string
+        reactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReactionOption'
