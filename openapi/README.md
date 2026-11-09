@@ -12,7 +12,7 @@ Today it's just the spec + docs page — no API routes or dashboard yet.
 ## What's here
 
 - **`public/duolingo.yaml`** — the OpenAPI spec itself. Covers the five endpoints LuoDingo's Rust client calls: profile, following, followers, the friends activity feed, and reacting to a feed card ("Celebrate"). Served statically at `/duolingo.yaml` (anything under `public/` is served at the site root by Next.js).
-- **`app/docs/`** — the Swagger UI page at `/docs`, pointed at that spec file.
+- **`app/docs/`** — the Swagger UI page at `/docs`, pointed at that spec file. Forces a light background on itself (`SwaggerDocs.tsx`) regardless of system/browser dark-mode preference — `swagger-ui-react` sets its own dark text colors but no background of its own, so without this it rendered as dark-on-near-black (our global dark-mode CSS) and looked completely blank under a dark color scheme. Found with `scripts/check-page.mjs` (see **Debugging**), since it wasn't reproducible by just glancing at `next build` output or testing in a light-mode browser.
 - **`app/page.tsx`** — a minimal landing page linking to `/docs`.
 
 ## Why the spec looks the way it does
@@ -54,3 +54,17 @@ npx @redocly/cli lint public/duolingo.yaml
 ```
 
 Run this after editing `duolingo.yaml` — it catches structural mistakes (bad `$ref`s, schema issues like a `nullable` field with no `type`, etc.) that are easy to introduce by hand and that Swagger UI won't necessarily complain about loudly.
+
+## Debugging
+
+`scripts/check-page.mjs` loads a URL in a real, system-installed Chrome (via Playwright, `channel: "chrome"` — no bundled browser download) and reports console messages, page errors, failed requests, the rendered text, and optionally a screenshot. Useful for exactly the kind of bug that doesn't show up in build output or server logs — e.g. the dark-mode/Swagger UI contrast issue above only showed up when actually rendering the page with a dark color scheme, not from `npm run build` or `npm run lint` succeeding:
+
+```bash
+# start a server first (separate terminal)
+npm run dev -- -p 3100
+
+# then, in another terminal
+npm run check-page -- http://localhost:3100/docs --dark --out /tmp/docs.png
+```
+
+`--dark` emulates a dark browser/OS color-scheme preference; omit it to use the default (light). `--out <path>` saves a screenshot.

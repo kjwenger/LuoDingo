@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "check-page": "node scripts/check-page.mjs"
   },
   "dependencies": {
     "next": "16.4.5",
@@ -22,6 +23,7 @@
     "@types/swagger-ui-react": "^5.18.0",
     "eslint": "^9",
     "eslint-config-next": "16.4.5",
+    "playwright": "^1.65.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
