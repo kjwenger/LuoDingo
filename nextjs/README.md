@@ -4,6 +4,7 @@
 [![Last commit affecting nextjs/](https://img.shields.io/github/last-commit/kjwenger/LuoDingo?path=nextjs&label=last%20commit%20(nextjs%2F))](https://github.com/kjwenger/LuoDingo/commits/main/nextjs)
 [![Next.js](https://img.shields.io/badge/Next.js-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)](Dockerfile)
 
 A reverse-engineered **OpenAPI 3.0** description of the unofficial Duolingo endpoints LuoDingo uses, served via a [Swagger UI](https://swagger.io/tools/swagger-ui/) page, **plus a web UI with equivalent functionality to the Rust `egui`/`adwaita` desktop apps** (friend updates feed, Celebrate/Celebrate All), built with [Next.js](https://nextjs.org). See the [top-level README](../README.md) for what LuoDingo is and why the API is "unofficial". Shares nothing with the Rust implementation except the API knowledge encoded in the spec — independently reimplemented.
 
@@ -13,6 +14,7 @@ A reverse-engineered **OpenAPI 3.0** description of the unofficial Duolingo endp
 - **`lib/duolingo/`** — server-only Duolingo client (`client.ts`, `import "server-only"`), plain TS types (`types.ts`), and pure formatting helpers (`format.ts`) mirroring `rust/core/src/{api,format}.rs` field-for-field and quirk-for-quirk (avatar URL `/medium` suffix, `CONGRATS` reaction value, `kudosIcon`-not-`triggerType` for badges).
 - **`app/feed/`** — the friend-updates UI at `/feed`. `page.tsx` is a Server Component (`export const dynamic = "force-dynamic"`) that fetches feed/following/followers in parallel and keeps partial results on partial failure (mirrors `controller.rs::refresh()`); `actions.ts` has the two Server Actions (`celebrateAction`, `celebrateAllAction`) that call Duolingo then `revalidatePath("/feed")`; `FeedView.tsx` is the Client Component (tabs, cards, buttons).
 - **`app/page.tsx`** — landing page linking to `/feed` and `/docs`.
+- **`Dockerfile`** — multi-stage build producing a minimal standalone production image (see **Docker** below).
 
 ## Why `cacheComponents` is off
 
@@ -56,7 +58,22 @@ npm run build
 npm run start
 ```
 
-Then open `/docs` for the Swagger UI, or `/duolingo.yaml` to fetch the raw spec.
+Then open `/docs` for the Swagger UI, `/feed` for the friend updates UI, or `/duolingo.yaml` to fetch the raw spec.
+
+## Docker
+
+`Dockerfile` is a standard multi-stage build on Next.js's `output: "standalone"` (set in `next.config.ts`) — the final image only carries the trace-selected `node_modules` subset, not the full dependency tree (~236MB, `node:22-alpine` base).
+
+```bash
+docker build -t luodingo-nextjs .
+
+# DUOLINGO_JWT_TOKEN is read at runtime (process.env, server-only), never baked into the
+# image -- pass it at `docker run`, the same way you'd promote one image through
+# multiple environments with different secrets.
+docker run -p 3000:3000 -e DUOLINGO_JWT_TOKEN="$(grep -oP '(?<=DUOLINGO_JWT_TOKEN=).*' .env.local)" luodingo-nextjs
+```
+
+No secret is needed to *build* the image — same reasoning as the CI build step (`/feed` is `force-dynamic`, so no live fetch happens at build time). CI builds the image on every push touching `nextjs/**` to catch Dockerfile bitrot, but doesn't push it anywhere.
 
 ## Validating the spec
 

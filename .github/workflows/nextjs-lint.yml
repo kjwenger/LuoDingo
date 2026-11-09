@@ -42,3 +42,7 @@ jobs:
         # Next.js never attempts the live Duolingo fetch at build time (verified locally
         # with the var unset before adding this step).
         run: npm run build
+
+      - name: Build Docker image
+        working-directory: nextjs
+        run: docker build -t luodingo-nextjs:ci .

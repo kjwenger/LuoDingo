@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Minimal, self-contained production output (.next/standalone) for the Docker image --
+  // see Dockerfile.
+  output: "standalone",
+
   // cacheComponents (and partialPrefetching, which requires it) are off: this app has a
   // single account/JWT and wants every read to hit Duolingo live with zero caching, which
   // is what cacheComponents' mandatory Suspense-boundary-for-dynamic-data model is built to
