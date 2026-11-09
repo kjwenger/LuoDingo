@@ -6,17 +6,23 @@ A small Rust client and desktop GUI for the unofficial Duolingo API. See the [to
 
 - Authenticates using a JWT extracted from a logged-in browser session (see **Credentials** below).
 - Fetches the friends activity feed (league promotions, kudos, follows — what's actually "recently achieved"), plus the lists of people you follow (`following`) and who follow you (`followers`), including each person's weekly/monthly/total XP and a recent-activity flag.
-- Shows that data in a native desktop window (built with [`egui`](https://github.com/emilk/egui)/`eframe`), with an Updates tab (the achievement feed) plus Following/Followers tables, and a manual Refresh button.
+- Shows that data in a native desktop window, with an Updates tab (the achievement feed) plus Following/Followers tables, and a manual Refresh button — via **two independent GUI frontends** that share the same data/business logic (see **Layout**).
 
 ## Layout
 
-- `src/api.rs` — the Duolingo API client: JWT handling, user-id decoding, and the HTTP calls (`profile`, `following`, `followers`, `feed`).
-- `src/main.rs` — the `egui` application: window state, tabs, the updates list, and the friends table.
+This is a Cargo **workspace** with three members:
+
+- **`core/`** (`luodingo-core`) — UI-toolkit-agnostic: the Duolingo API client (`src/api.rs`: JWT handling, user-id decoding, HTTP calls), the `Controller` that owns fetched state and refreshes it (`src/controller.rs`), and pure formatting helpers like timestamp/reaction/comment rendering (`src/format.rs`). Neither `egui` nor `gtk`/`libadwaita` appear anywhere in this crate — both frontends below depend on it, not the other way around.
+- **`egui-app/`** (`luodingo-egui`) — a desktop window built with [`egui`](https://github.com/emilk/egui)/`eframe`. Pure-Rust rendering, no system GUI libraries required.
+- **`adwaita-app/`** (`luodingo-adwaita`) — the same data in a native GNOME-styled window, built with `gtk4-rs`/`libadwaita` (`adw::ViewStack` tabs, `adw::ActionRow` list rows). Requires GTK4 + libadwaita installed on the system (not pure-Rust — see **Requirements**).
+
+Both frontends construct a `luodingo_core::Controller` and just render its fields (`updates`, `following`, `followers`, `error`) — adding a third frontend means writing a new thin `src/main.rs`, not touching `core/` at all.
 
 ## Requirements
 
 - Rust (install via [rustup](https://rustup.rs) if you don't have it: `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`).
-- A graphical display (X11 or Wayland) to show the window — this is a native GUI app, not a headless/terminal tool.
+- A graphical display (X11 or Wayland) to show the window — these are native GUI apps, not headless/terminal tools.
+- For `adwaita-app` only: GTK4 and libadwaita development packages (on Debian/Ubuntu: `sudo apt install pkg-config libgtk-4-dev libadwaita-1-dev`). `egui-app` needs none of this — it's pure Rust.
 
 ## Credentials
 
@@ -32,12 +38,15 @@ Username/password login against Duolingo's `/login` endpoint does **not** work h
 
 ## Build & run
 
+This is a workspace with two binaries, so pick one with `-p`:
+
 ```sh
-cargo build       # compile
-cargo run         # build (if needed) and launch the GUI
+cargo build --workspace        # compile everything
+cargo run -p luodingo-egui     # launch the egui frontend
+cargo run -p luodingo-adwaita  # launch the GNOME/libadwaita frontend
 ```
 
-On first run, dependencies are fetched and compiled, which can take a minute or two. Subsequent runs are fast.
+Run these from this directory (`rust/`) so `.env` is found — `Controller::new()` loads it via `dotenvy`, which searches the current directory upward. On first run, dependencies are fetched and compiled, which can take a minute or two (longer for `adwaita-app`, since GTK4/libadwaita are larger C libraries being linked against). Subsequent runs are fast.
 
 ## Known limitations
 
@@ -45,3 +54,4 @@ On first run, dependencies are fetched and compiled, which can take a minute or 
 - Some users have no display name set (`name` is `null` in the API response); the app falls back to their username in the Following/Followers tables, and to "Someone" in the Updates feed.
 - Refresh is manual (no auto-polling) and runs on the UI thread, so the window will briefly freeze while a refresh is in flight.
 - Each update shows reaction counts (🎉/❤️/👍/etc., from `reactionCounts`) when present. Comment counts (`commentPreview`) are shown too, but that field was `null` on every card observed so far — its non-null shape is unconfirmed, so the comment indicator falls back to a bare 💬 icon (no number) if a real comment payload doesn't match the field names we guessed (`totalComments`/`commentCount`/`count`).
+- `adwaita-app` uses `adw::ViewSwitcherTitle`, which libadwaita deprecated in 1.4 in favor of a newer adaptive-layout pattern (`adw::ViewSwitcher` + `adw::Breakpoint`). It still works (just a deprecation warning at build time) and was the simplest widget for a first pass; worth revisiting if this frontend gets more attention.

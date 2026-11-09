@@ -1,0 +1,9 @@
+[package]
+name = "luodingo-egui"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+luodingo-core = { path = "../core" }
+eframe = "0.37.0"
+egui_extras = "0.37.0"

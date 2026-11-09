@@ -1,0 +1,9 @@
+[package]
+name = "luodingo-adwaita"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+gtk4 = "0.11.5"
+libadwaita = { version = "0.9.2", features = ["v1_9"] }
+luodingo-core = { path = "../core" }

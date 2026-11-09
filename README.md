@@ -14,7 +14,7 @@ There is no supported, documented Duolingo API for third-party apps. Everything 
 
 ## What's here
 
-- **[`rust/`](rust/README.md)** — a Rust client with a small `egui`-based desktop window showing your friends' and followers' XP stats. See that folder's README for build/run instructions and implementation details.
+- **[`rust/`](rust/README.md)** — a Rust Cargo workspace: a UI-agnostic core (the API client and app state) plus two interchangeable desktop GUI frontends built on top of it — one with [`egui`](https://github.com/emilk/egui) (pure Rust, no system dependencies) and one with GTK4/libadwaita (native GNOME look and feel). See that folder's README for build/run instructions and implementation details.
 
 ## Credentials
 
