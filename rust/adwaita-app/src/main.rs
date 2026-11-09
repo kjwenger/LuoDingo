@@ -7,10 +7,9 @@ use gtk4::prelude::*;
 use gtk4::{gdk, glib};
 use libadwaita as adw;
 use libadwaita::prelude::*;
+use log::{debug, info, warn};
 
-use luodingo_core::format::{
-    self, comment_indicator, humanize_timestamp, normalize_avatar_url, reactions_summary,
-};
+use luodingo_core::format::{self, avatar_url, comment_indicator, humanize_timestamp, reactions_summary};
 use luodingo_core::{fetch_bytes, Controller, FeedCard, Friend};
 
 const CARD_CSS: &str = "
@@ -49,10 +48,28 @@ fn load_css() {
 
 fn avatar_texture(url: &str, cache: &mut HashMap<String, gdk::Texture>) -> Option<gdk::Texture> {
     if let Some(texture) = cache.get(url) {
+        debug!("avatar cache hit: {url}");
         return Some(texture.clone());
     }
-    let bytes = fetch_bytes(url).ok()?;
-    let texture = gdk::Texture::from_bytes(&glib::Bytes::from(&bytes)).ok()?;
+
+    debug!("avatar cache miss, fetching: {url}");
+    let bytes = match fetch_bytes(url) {
+        Ok(b) => b,
+        Err(e) => {
+            warn!("avatar failed to fetch ({url}): {e}");
+            return None;
+        }
+    };
+
+    let texture = match gdk::Texture::from_bytes(&glib::Bytes::from(&bytes)) {
+        Ok(t) => t,
+        Err(e) => {
+            warn!("avatar failed to decode ({url}, {} bytes): {e}", bytes.len());
+            return None;
+        }
+    };
+
+    debug!("avatar ready: {url} ({} bytes)", bytes.len());
     cache.insert(url.to_string(), texture.clone());
     Some(texture)
 }
@@ -64,9 +81,11 @@ fn avatar_widget(
 ) -> adw::Avatar {
     let avatar = adw::Avatar::new(40, Some(name), true);
     if let Some(url) = url {
-        let url = normalize_avatar_url(url);
+        let url = avatar_url(url);
         if let Some(texture) = avatar_texture(&url, cache) {
             avatar.set_custom_image(Some(&texture));
+        } else {
+            debug!("avatar falling back to initials for {name:?}");
         }
     }
     avatar
@@ -135,6 +154,7 @@ fn update_card(
             let state = state.clone();
             let widgets = widgets.clone();
             move |_| {
+                info!("Celebrate clicked: event_id={event_id}");
                 state.borrow_mut().controller.celebrate(&event_id);
                 render(&state, &widgets);
             }
@@ -201,6 +221,12 @@ fn render(state: &Rc<RefCell<AppState>>, widgets: &Widgets) {
             st.controller.followers.clone(),
         )
     };
+    debug!(
+        "render: {} updates, {} following, {} followers, error={error:?}",
+        updates.len(),
+        following.len(),
+        followers.len()
+    );
 
     match error {
         Some(err) => {
@@ -299,6 +325,7 @@ fn build_window(app: &adw::Application, controller: Controller) -> adw::Applicat
         let state = state.clone();
         let widgets = widgets.clone();
         move |_| {
+            info!("Refresh clicked");
             state.borrow_mut().controller.refresh();
             render(&state, &widgets);
         }
@@ -314,9 +341,13 @@ fn build_window(app: &adw::Application, controller: Controller) -> adw::Applicat
 }
 
 fn main() -> gtk::glib::ExitCode {
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    info!("starting luodingo-adwaita");
+
     let controller = match Controller::new() {
         Ok(c) => c,
         Err(e) => {
+            log::error!("startup failed: {e}");
             eprintln!("error: {e}");
             std::process::exit(1);
         }
@@ -328,6 +359,7 @@ fn main() -> gtk::glib::ExitCode {
 
     let controller = RefCell::new(Some(controller));
     app.connect_activate(move |app| {
+        debug!("activate: building window");
         adw::StyleManager::default().set_color_scheme(adw::ColorScheme::ForceDark);
         load_css();
         let controller = controller.borrow_mut().take().expect("activate called once");

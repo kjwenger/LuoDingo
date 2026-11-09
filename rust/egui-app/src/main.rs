@@ -1,7 +1,6 @@
 use eframe::egui;
-use luodingo_core::format::{
-    self, comment_indicator, humanize_timestamp, normalize_avatar_url, reactions_summary,
-};
+use log::{info, trace, warn};
+use luodingo_core::format::{self, avatar_url, comment_indicator, humanize_timestamp, reactions_summary};
 use luodingo_core::{Controller, FeedCard, Friend};
 
 // Approximate Duolingo dark-theme palette (not pixel-matched to the real site).
@@ -32,8 +31,24 @@ impl App {
 
     fn avatar(ui: &mut egui::Ui, picture: Option<&str>, size: f32) {
         if let Some(url) = picture {
+            let uri = avatar_url(url);
+
+            // egui loads images asynchronously and shows load failures as an in-widget
+            // tooltip, but that's only visible if you happen to hover it. Poll the same
+            // loader here (hits its cache, so this doesn't trigger an extra fetch) purely
+            // to also get failures into the console log.
+            match ui.ctx().try_load_texture(
+                &uri,
+                egui::TextureOptions::default(),
+                egui::SizeHint::default(),
+            ) {
+                Ok(egui::load::TexturePoll::Ready { .. }) => trace!("avatar ready: {uri}"),
+                Ok(egui::load::TexturePoll::Pending { .. }) => trace!("avatar pending: {uri}"),
+                Err(e) => warn!("avatar failed to load ({uri}): {e}"),
+            }
+
             ui.add(
-                egui::Image::new(normalize_avatar_url(url))
+                egui::Image::new(uri)
                     .fit_to_exact_size(egui::vec2(size, size))
                     .corner_radius((size / 2.0) as u8),
             );
@@ -206,6 +221,7 @@ impl eframe::App for App {
             ui.horizontal(|ui| {
                 ui.heading(egui::RichText::new("LuoDingo").color(ACCENT_GREEN));
                 if ui.button("Refresh").clicked() {
+                    info!("Refresh clicked");
                     self.controller.refresh();
                 }
             });
@@ -244,6 +260,7 @@ impl eframe::App for App {
             });
 
             if let Some(event_id) = to_celebrate {
+                info!("Celebrate clicked: event_id={event_id}");
                 self.controller.celebrate(&event_id);
             }
         });
@@ -251,9 +268,13 @@ impl eframe::App for App {
 }
 
 fn main() -> eframe::Result<()> {
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    info!("starting luodingo-egui");
+
     let controller = match Controller::new() {
         Ok(c) => c,
         Err(e) => {
+            log::error!("startup failed: {e}");
             eprintln!("error: {e}");
             std::process::exit(1);
         }

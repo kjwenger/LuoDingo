@@ -47,14 +47,19 @@ pub fn comment_indicator(card: &FeedCard) -> Option<String> {
     })
 }
 
-/// Some avatar URLs come back protocol-relative (`//simg-ssl.duolingo.com/...`); browsers
-/// resolve that against the page's own scheme, but a standalone HTTP client needs it explicit.
-pub fn normalize_avatar_url(url: &str) -> String {
-    if let Some(rest) = url.strip_prefix("//") {
-        format!("https://{rest}")
-    } else {
-        url.to_string()
-    }
+/// Turns a raw `picture` URL from the API into one that actually loads. Two issues found by
+/// hand (the CDN returned no body on failure, just a bare HTTP status, so there was nothing
+/// to inspect except by trying requests): URLs come back protocol-relative
+/// (`//simg-ssl.duolingo.com/...`), and Duolingo's avatar CDN requires a trailing size
+/// segment on *every* avatar URL, custom-rendered or default — omitting it returns 400 on
+/// the render-CDN host and 403 on the default-avatar host. Verified live: appending
+/// `/medium` turned both of those into 200s.
+pub fn avatar_url(url: &str) -> String {
+    let url = match url.strip_prefix("//") {
+        Some(rest) => format!("https://{rest}"),
+        None => url.to_string(),
+    };
+    format!("{}/medium", url.trim_end_matches('/'))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

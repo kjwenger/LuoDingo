@@ -7,3 +7,6 @@ edition = "2024"
 luodingo-core = { path = "../core" }
 eframe = "0.37.0"
 egui_extras = { version = "0.37.0", features = ["image", "http"] }
+log = "0.4.35"
+env_logger = "0.11.11"
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg"] }

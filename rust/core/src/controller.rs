@@ -2,6 +2,7 @@
 //! reads its fields; none of this depends on any particular UI toolkit.
 
 use crate::api::{Client, FeedCard, Friend, CELEBRATE_REACTION};
+use log::{info, warn};
 
 pub struct Controller {
     client: Client,
@@ -26,11 +27,15 @@ impl Controller {
     }
 
     pub fn refresh(&mut self) {
+        info!("refresh: starting");
         self.error = None;
 
         match self.client.feed() {
             Ok(cards) => self.updates = cards,
-            Err(e) => self.error = Some(format!("feed: {e}")),
+            Err(e) => {
+                warn!("refresh: feed failed: {e}");
+                self.error = Some(format!("feed: {e}"));
+            }
         }
 
         match self.client.following() {
@@ -38,7 +43,10 @@ impl Controller {
                 friends.sort_by(|a, b| b.weekly_xp.cmp(&a.weekly_xp));
                 self.following = friends;
             }
-            Err(e) => self.error = Some(format!("following: {e}")),
+            Err(e) => {
+                warn!("refresh: following failed: {e}");
+                self.error = Some(format!("following: {e}"));
+            }
         }
 
         match self.client.followers() {
@@ -46,13 +54,25 @@ impl Controller {
                 friends.sort_by(|a, b| b.weekly_xp.cmp(&a.weekly_xp));
                 self.followers = friends;
             }
-            Err(e) => self.error = Some(format!("followers: {e}")),
+            Err(e) => {
+                warn!("refresh: followers failed: {e}");
+                self.error = Some(format!("followers: {e}"));
+            }
         }
+
+        info!(
+            "refresh: done ({} updates, {} following, {} followers, error={:?})",
+            self.updates.len(),
+            self.following.len(),
+            self.followers.len(),
+            self.error
+        );
     }
 
     /// Sends a "Celebrate" reaction for the given update and, on success, updates that
     /// card's counts locally so the UI reflects it immediately without a full refresh.
     pub fn celebrate(&mut self, event_id: &str) {
+        info!("celebrate: event_id={event_id}");
         match self.client.react(event_id, CELEBRATE_REACTION) {
             Ok(()) => {
                 if let Some(card) = self
@@ -62,9 +82,14 @@ impl Controller {
                 {
                     *card.reaction_counts.entry("congrats".to_string()).or_insert(0) += 1;
                     card.reaction_type = Some("congrats".to_string());
+                } else {
+                    warn!("celebrate: event_id={event_id} reacted but no matching card found locally");
                 }
             }
-            Err(e) => self.error = Some(format!("celebrate: {e}")),
+            Err(e) => {
+                warn!("celebrate: event_id={event_id} failed: {e}");
+                self.error = Some(format!("celebrate: {e}"));
+            }
         }
     }
 }

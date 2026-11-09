@@ -1,3 +1,4 @@
+use log::{debug, error, info, trace, warn};
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::env;
@@ -13,15 +14,27 @@ pub const CELEBRATE_REACTION: &str = "CONGRATS";
 /// CDN assets don't need the JWT. Frontends that can't load images by URL themselves
 /// (unlike egui's built-in loaders) decode these bytes with their own toolkit.
 pub fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
-    let response =
-        reqwest::blocking::get(url).map_err(|e| format!("request to {url} failed: {e}"))?;
-    if !response.status().is_success() {
-        return Err(format!("GET {url} returned HTTP {}", response.status()));
+    trace!("GET {url} (bytes)");
+    let response = reqwest::blocking::get(url).map_err(|e| {
+        let msg = format!("request to {url} failed: {e}");
+        warn!("{msg}");
+        msg
+    })?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let msg = format!("GET {url} returned HTTP {status}");
+        warn!("{msg}");
+        return Err(msg);
     }
-    response
-        .bytes()
-        .map(|b| b.to_vec())
-        .map_err(|e| format!("failed to read response body from {url}: {e}"))
+
+    let bytes = response.bytes().map_err(|e| {
+        let msg = format!("failed to read response body from {url}: {e}");
+        warn!("{msg}");
+        msg
+    })?;
+    debug!("GET {url} -> {status}, {} bytes", bytes.len());
+    Ok(bytes.to_vec())
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -117,11 +130,20 @@ pub struct Client {
 
 impl Client {
     pub fn from_env() -> Result<Self, String> {
-        dotenvy::dotenv().map_err(|e| format!("failed to load .env: {e}"))?;
+        let env_path = dotenvy::dotenv().map_err(|e| {
+            let msg = format!("failed to load .env: {e}");
+            error!("{msg}");
+            msg
+        })?;
+        debug!("loaded .env from {}", env_path.display());
 
-        let jwt = env::var("DUOLINGO_JWT_TOKEN")
-            .map_err(|_| "DUOLINGO_JWT_TOKEN is not set in .env".to_string())?;
+        let jwt = env::var("DUOLINGO_JWT_TOKEN").map_err(|_| {
+            let msg = "DUOLINGO_JWT_TOKEN is not set in .env".to_string();
+            error!("{msg}");
+            msg
+        })?;
         let user_id = user_id_from_jwt(&jwt)?;
+        info!("Duolingo client ready (user_id={user_id})");
 
         Ok(Self {
             http: reqwest::blocking::Client::new(),
@@ -138,6 +160,7 @@ impl Client {
     pub fn following(&self) -> Result<Vec<Friend>, String> {
         let resp: SubscriptionsResponse =
             self.get(&format!("{API_BASE}/users/{}/subscriptions", self.user_id))?;
+        info!("fetched {} following", resp.subscriptions.len());
         Ok(resp.subscriptions)
     }
 
@@ -145,6 +168,7 @@ impl Client {
     pub fn followers(&self) -> Result<Vec<Friend>, String> {
         let resp: SubscribersResponse =
             self.get(&format!("{API_BASE}/users/{}/subscribers", self.user_id))?;
+        info!("fetched {} followers", resp.subscribers.len());
         Ok(resp.subscribers)
     }
 
@@ -157,6 +181,13 @@ impl Client {
         ))?;
         let mut cards: Vec<FeedCard> = resp.feed.into_iter().flat_map(|g| g.feed_cards).collect();
         cards.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        info!("fetched {} feed cards", cards.len());
+        for card in &cards {
+            trace!(
+                "feed card: type={} event_id={:?} kudos_icon={:?} picture={:?}",
+                card.card_type, card.event_id, card.kudos_icon, card.picture
+            );
+        }
         Ok(cards)
     }
 
@@ -172,35 +203,44 @@ impl Client {
             "userId": self.user_id,
         });
 
-        let response = self
-            .http
-            .post(url)
-            .bearer_auth(&self.jwt)
-            .json(&body)
-            .send()
-            .map_err(|e| format!("request to {url} failed: {e}"))?;
+        info!("POST {url} (reaction={reaction}, event_id={event_id})");
+        let response = self.http.post(url).bearer_auth(&self.jwt).json(&body).send().map_err(|e| {
+            let msg = format!("request to {url} failed: {e}");
+            error!("{msg}");
+            msg
+        })?;
 
-        if !response.status().is_success() {
-            return Err(format!("Duolingo API returned HTTP {} for {url}", response.status()));
+        let status = response.status();
+        if !status.is_success() {
+            let msg = format!("Duolingo API returned HTTP {status} for {url}");
+            warn!("{msg}");
+            return Err(msg);
         }
+        debug!("reaction accepted: {status}");
         Ok(())
     }
 
     fn get<T: serde::de::DeserializeOwned>(&self, url: &str) -> Result<T, String> {
-        let response = self
-            .http
-            .get(url)
-            .bearer_auth(&self.jwt)
-            .send()
-            .map_err(|e| format!("request to {url} failed: {e}"))?;
+        debug!("GET {url}");
+        let response = self.http.get(url).bearer_auth(&self.jwt).send().map_err(|e| {
+            let msg = format!("request to {url} failed: {e}");
+            error!("{msg}");
+            msg
+        })?;
 
-        if !response.status().is_success() {
-            return Err(format!("Duolingo API returned HTTP {} for {url}", response.status()));
+        let status = response.status();
+        if !status.is_success() {
+            let msg = format!("Duolingo API returned HTTP {status} for {url}");
+            warn!("{msg}");
+            return Err(msg);
         }
+        trace!("GET {url} -> {status}");
 
-        response
-            .json::<T>()
-            .map_err(|e| format!("failed to parse response from {url}: {e}"))
+        response.json::<T>().map_err(|e| {
+            let msg = format!("failed to parse response from {url}: {e}");
+            error!("{msg}");
+            msg
+        })
     }
 }
 

@@ -13,7 +13,7 @@ A small Rust client and desktop GUI for the unofficial Duolingo API. See the [to
 
 This is a Cargo **workspace** with three members:
 
-- **`core/`** (`luodingo-core`) — UI-toolkit-agnostic: the Duolingo API client (`src/api.rs`: JWT handling, user-id decoding, HTTP calls including `react`/`fetch_bytes`), the `Controller` that owns fetched state and refreshes/celebrates (`src/controller.rs`), and pure formatting helpers — timestamp/reaction/comment text, avatar URL normalization, and `format::badge()` which turns a card's `kudosIcon` string (e.g. `kudos_feed_leaderboard_rank_1`) into a glyph + color (gold/silver/bronze medal, league-promotion arrow, etc.) both frontends draw identically. Neither `egui` nor `gtk`/`libadwaita` appear anywhere in this crate.
+- **`core/`** (`luodingo-core`) — UI-toolkit-agnostic: the Duolingo API client (`src/api.rs`: JWT handling, user-id decoding, HTTP calls including `react`/`fetch_bytes`), the `Controller` that owns fetched state and refreshes/celebrates (`src/controller.rs`), and pure formatting helpers — timestamp/reaction/comment text, `format::avatar_url()` (fixes protocol-relative URLs and appends the CDN's required size segment — see **Known limitations**), and `format::badge()` which turns a card's `kudosIcon` string (e.g. `kudos_feed_leaderboard_rank_1`) into a glyph + color (gold/silver/bronze medal, league-promotion arrow, etc.) both frontends draw identically. Neither `egui` nor `gtk`/`libadwaita` appear anywhere in this crate. Uses the `log` facade (see **Logging**) rather than printing directly.
 - **`egui-app/`** (`luodingo-egui`) — a desktop window built with [`egui`](https://github.com/emilk/egui)/`eframe`. Pure-Rust rendering, no system GUI libraries required. Avatars load asynchronously via egui's built-in image loaders (`egui_extras::install_image_loaders`); the badge is hand-drawn with `Painter::circle_filled`/`text`.
 - **`adwaita-app/`** (`luodingo-adwaita`) — the same data in a native GNOME-styled window, built with `gtk4-rs`/`libadwaita` (`adw::ViewStack` tabs, custom card widgets for Updates, `adw::ActionRow`+`adw::Avatar` for Following/Followers). Requires GTK4 + libadwaita installed on the system (not pure-Rust — see **Requirements**). Forces dark mode via `adw::StyleManager`; avatars are fetched with `core::fetch_bytes` and decoded with `gdk::Texture::from_bytes` (blocking, cached in-memory by URL so repeat refreshes don't re-download unchanged ones).
 
@@ -42,15 +42,43 @@ Username/password login against Duolingo's `/login` endpoint does **not** work h
 This is a workspace with two binaries, so pick one with `-p`:
 
 ```bash
-cargo build --workspace        # compile everything
-cargo run -p luodingo-egui     # launch the egui frontend
-cargo run -p luodingo-adwaita  # launch the GNOME/libadwaita frontend
+# compile everything
+cargo build --workspace
+
+# launch the egui frontend
+cargo run -p luodingo-egui
+
+# launch the GNOME/libadwaita frontend
+cargo run -p luodingo-adwaita
 ```
 
 Run these from this directory (`rust/`) so `.env` is found — `Controller::new()` loads it via `dotenvy`, which searches the current directory upward. On first run, dependencies are fetched and compiled, which can take a minute or two (longer for `adwaita-app`, since GTK4/libadwaita are larger C libraries being linked against). Subsequent runs are fast.
 
+## Logging
+
+Both apps log through the standard [`log`](https://docs.rs/log) facade (`error!`/`warn!`/`info!`/`debug!`/`trace!`), backed by [`env_logger`](https://docs.rs/env_logger). Logs go to stderr. Default level is `info`, controlled via `RUST_LOG`:
+
+```bash
+# default: info level for everything (startup, refresh/celebrate lifecycle, request counts)
+cargo run -p luodingo-egui
+
+# verbose, but scoped to our own crates only -- recommended for diagnosing a specific
+# problem (e.g. "why isn't this avatar loading?"). Unscoped `RUST_LOG=debug` or `=trace`
+# also works but is extremely noisy: it turns on debug/trace logging for every dependency
+# too (reqwest, rustls, hyper, h2, ...).
+RUST_LOG=luodingo_core=debug,luodingo_egui=debug cargo run -p luodingo-egui
+RUST_LOG=luodingo_core=debug,luodingo_adwaita=debug cargo run -p luodingo-adwaita
+
+# everything, including per-frame avatar-loader polling (egui-app) and full feed card
+# dumps (core) -- very verbose
+RUST_LOG=luodingo_core=trace,luodingo_egui=trace cargo run -p luodingo-egui
+```
+
+What's logged: every HTTP request/response (`core::api`) including status codes, `Controller::refresh()`/`celebrate()` lifecycle and counts, Refresh/Celebrate button clicks in both frontends, and avatar load outcomes in both frontends (`egui-app` polls its own async image loader purely to surface failures to the log, since otherwise they're only visible by hovering the broken-image icon in the UI; `adwaita-app` logs its own synchronous fetch+decode directly, since it does that work itself). This is how the two real avatar-loading bugs below (CDN size segment, missing JPEG decoder) were actually found and confirmed fixed — via log output, not screenshots.
+
 ## Known limitations
 
+- Duolingo's avatar CDN requires a trailing size segment on every avatar URL (`/medium`, `/large`, etc.) — omitting it returns `400 Bad Request` on the custom-rendered-avatar host and `403 Forbidden` on the default-avatar host. `format::avatar_url()` appends `/medium` to fix both. Found and confirmed via the log output described above (not from the API docs — there are none).
 - The activity feed (`GET /2023-05-23/friends/users/{id}/feed/v2`) only surfaces what Duolingo's own kudos system tracks — league promotions, streak/league milestones, follows, etc. It doesn't include every possible action (e.g. ordinary lesson completions aren't cards unless they trigger a kudos-worthy milestone).
 - Some users have no display name set (`name` is `null` in the API response); the app falls back to their username in the Following/Followers tables, and to "Someone" in the Updates feed.
 - Refresh is manual (no auto-polling) and runs on the UI thread, so the window will briefly freeze while a refresh is in flight.
