@@ -70,11 +70,28 @@ impl App {
                 ui.strong(name);
                 ui.label(card.body.as_deref().unwrap_or(card.card_type.as_str()));
             });
-            ui.label(
-                egui::RichText::new(humanize_timestamp(card.timestamp))
+
+            ui.horizontal(|ui| {
+                let meta = egui::RichText::new(humanize_timestamp(card.timestamp))
                     .small()
-                    .color(egui::Color32::GRAY),
-            );
+                    .color(egui::Color32::GRAY);
+                ui.label(meta);
+
+                if !card.reaction_counts.is_empty() {
+                    let text = egui::RichText::new(format!("· {}", reactions_summary(card)))
+                        .small()
+                        .color(egui::Color32::GRAY);
+                    ui.label(text);
+                }
+
+                if let Some(comments) = comment_indicator(card) {
+                    let text = egui::RichText::new(format!("· {comments}"))
+                        .small()
+                        .color(egui::Color32::GRAY);
+                    ui.label(text);
+                }
+            });
+
             ui.separator();
         }
     }
@@ -139,6 +156,50 @@ impl App {
                 });
             });
     }
+}
+
+fn reaction_emoji(name: &str) -> &'static str {
+    match name {
+        "congrats" => "\u{1F389}",  // 🎉
+        "like" => "\u{1F44D}",      // 👍
+        "love" => "\u{2764}\u{FE0F}", // ❤️
+        "haha" => "\u{1F602}",      // 😂
+        "cheer" => "\u{1F4E3}",     // 📣
+        "high_five" => "\u{1F64C}", // 🙌
+        "support" => "\u{1F91D}",  // 🤝
+        _ => "\u{1F44D}",
+    }
+}
+
+/// Reaction counts sorted highest-first, e.g. "🎉 45  ❤️ 2".
+fn reactions_summary(card: &FeedCard) -> String {
+    let mut counts: Vec<(&String, &u64)> = card.reaction_counts.iter().collect();
+    counts.sort_by(|a, b| b.1.cmp(a.1));
+    counts
+        .into_iter()
+        .map(|(name, count)| format!("{} {count}", reaction_emoji(name)))
+        .collect::<Vec<_>>()
+        .join("  ")
+}
+
+/// None when there's nothing to show; otherwise a "💬 N" or, if the preview's shape doesn't
+/// match any known count field (unconfirmed, since no observed card has had comments yet),
+/// a bare "💬" indicator.
+fn comment_indicator(card: &FeedCard) -> Option<String> {
+    let value = card.comment_preview.as_ref()?;
+    if value.is_null() {
+        return None;
+    }
+    let count = value
+        .get("totalComments")
+        .or_else(|| value.get("commentCount"))
+        .or_else(|| value.get("count"))
+        .and_then(|v| v.as_u64());
+
+    Some(match count {
+        Some(n) => format!("\u{1F4AC} {n}"),
+        None => "\u{1F4AC}".to_string(),
+    })
 }
 
 fn humanize_timestamp(ts: i64) -> String {

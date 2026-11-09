@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use std::collections::BTreeMap;
 use std::env;
 
 const API_BASE: &str = "https://www.duolingo.com/2017-06-30";
@@ -50,6 +51,14 @@ pub struct FeedCard {
     pub timestamp: i64,
     #[serde(rename = "userId")]
     pub user_id: u64,
+    /// Reaction name (e.g. "congrats", "love") -> count. Absent on cards that can't be
+    /// reacted to (e.g. FOLLOW), and possibly empty on ones that can but haven't been yet.
+    #[serde(rename = "reactionCounts", default)]
+    pub reaction_counts: BTreeMap<String, u64>,
+    /// Present (possibly null) on kudos-style cards. Its non-null shape is unconfirmed, since
+    /// no card observed so far has had any comments.
+    #[serde(rename = "commentPreview", default)]
+    pub comment_preview: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
