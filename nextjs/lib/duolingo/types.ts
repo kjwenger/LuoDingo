@@ -33,4 +33,8 @@ export interface FeedCard {
   reactionCounts: Record<string, number>;
   reactionType: string | null;
   commentPreview: unknown;
+  // SHARE_SENTENCE_OFFER-only: body is "" for this card type, the actual content lives
+  // here instead.
+  fromSentence: string | null;
+  toSentence: string | null;
 }

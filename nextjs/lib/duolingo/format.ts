@@ -3,6 +3,33 @@
 
 import type { FeedCard } from "./types";
 
+/**
+ * The card's displayable achievement/update text. Most card types already have this in
+ * `body`; SHARE_SENTENCE_OFFER is the one confirmed exception -- `body` is `""` there,
+ * with the actual content in `fromSentence`/`toSentence` instead. Found live: a raw card
+ * showed the literal string "SHARE_SENTENCE_OFFER" to the user before this existed,
+ * because the old fallback (`body || cardType`) had nothing better to fall back to.
+ */
+export function cardBody(card: FeedCard): string {
+  if (card.cardType === "SHARE_SENTENCE_OFFER" && card.fromSentence && card.toSentence) {
+    return `"${card.fromSentence}" \u{2192} "${card.toSentence}"`;
+  }
+  return card.body || card.cardType;
+}
+
+/**
+ * Whether the Celebrate button should be shown at all. `eventId` alone isn't enough --
+ * found live: FOLLOW cards have a real eventId but `reactionCounts: null` (Duolingo
+ * tracks no reaction mechanism for them at all), and SHARE_SENTENCE_OFFER cards use
+ * `like`/`haha`/`love` reactions, not `congrats` -- sending CONGRATS (the only reaction
+ * value actually verified against the live API, see core/api.ts) would be wrong for
+ * either. Only show it where CONGRATS is the type of reaction the real app itself would
+ * send for a bare click.
+ */
+export function canCelebrate(card: FeedCard): boolean {
+  return Boolean(card.eventId) && (card.cardType === "KUDOS_OFFER" || card.cardType === "KUDOS_MILESTONE");
+}
+
 export function reactionEmoji(name: string): string {
   switch (name) {
     case "congrats":

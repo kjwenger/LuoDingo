@@ -5,6 +5,8 @@ import { type ReactNode, useState, useTransition } from "react";
 import {
   avatarUrl,
   badge,
+  canCelebrate,
+  cardBody,
   commentIndicator,
   humanizeTimestamp,
   reactionsSummary,
@@ -41,7 +43,7 @@ export default function FeedView({
   const [tab, setTab] = useState<Tab>("updates");
   const [isPending, startTransition] = useTransition();
 
-  const celebratableCount = updates.filter((c) => c.eventId && !c.reactionType).length;
+  const celebratableCount = updates.filter((c) => canCelebrate(c) && !c.reactionType).length;
 
   return (
     <div style={{ background: BG, color: "#fff", minHeight: "100vh" }} className="p-4 font-sans">
@@ -184,10 +186,10 @@ function UpdatesList({
                 )}
               </div>
 
-              <p className="text-sm">{card.body || card.cardType}</p>
+              <p className="text-sm">{cardBody(card)}</p>
 
               <div className="mt-1 flex items-center gap-3 text-xs">
-                {card.eventId && (
+                {canCelebrate(card) && (
                   <button
                     onClick={() => onCelebrate(card.eventId as string)}
                     disabled={pending || already}

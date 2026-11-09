@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { CELEBRATE_REACTION, getFeed, react } from "@/lib/duolingo/client";
+import { canCelebrate } from "@/lib/duolingo/format";
 
 /** Sends a "Celebrate" reaction for one update, then refreshes the page's data. */
 export async function celebrateAction(eventId: string): Promise<void> {
@@ -11,15 +12,17 @@ export async function celebrateAction(eventId: string): Promise<void> {
 }
 
 /**
- * Celebrates every update that can still be celebrated (has an event id -- FOLLOW cards
- * don't -- and hasn't already been reacted to), mirroring
+ * Celebrates every update that can still be celebrated with CONGRATS (see
+ * format.ts::canCelebrate -- not just "has an event id": FOLLOW cards have one too, but
+ * no reaction mechanism Duolingo tracks for them, and SHARE_SENTENCE_OFFER uses
+ * like/haha/love, not congrats) and hasn't already been reacted to. Mirrors
  * rust/core/src/controller.rs::celebrate_all(). Keeps going even if some calls fail,
  * logging each one, then refreshes the page's data once at the end.
  */
 export async function celebrateAllAction(): Promise<void> {
   const cards = await getFeed();
   const eventIds = cards
-    .filter((card) => card.eventId && !card.reactionType)
+    .filter((card) => canCelebrate(card) && !card.reactionType)
     .map((card) => card.eventId as string);
 
   console.log(`[actions] celebrate_all: ${eventIds.length} eligible cards`);
