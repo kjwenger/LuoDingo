@@ -1,76 +1,172 @@
-use serde::Deserialize;
-use std::env;
-use std::process::ExitCode;
+mod api;
 
-const API_BASE: &str = "https://www.duolingo.com/2017-06-30";
+use api::{Client, Friend};
+use eframe::egui;
 
-#[derive(Debug, Deserialize)]
-struct UserProfile {
-    username: String,
-    #[serde(rename = "totalXp")]
-    total_xp: u64,
-    streak: Option<u64>,
+#[derive(PartialEq, Clone, Copy)]
+enum Tab {
+    Following,
+    Followers,
 }
 
-fn user_id_from_jwt(jwt: &str) -> Result<u64, String> {
-    let payload = jwt
-        .split('.')
-        .nth(1)
-        .ok_or("JWT is missing its payload segment")?;
-
-    use base64::Engine;
-    let decoded = base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .decode(payload.trim_end_matches('='))
-        .map_err(|e| format!("failed to base64-decode JWT payload: {e}"))?;
-
-    let claims: serde_json::Value =
-        serde_json::from_slice(&decoded).map_err(|e| format!("JWT payload is not JSON: {e}"))?;
-
-    claims["sub"]
-        .as_u64()
-        .ok_or_else(|| "JWT payload has no numeric 'sub' claim".to_string())
+struct App {
+    client: Client,
+    tab: Tab,
+    following: Vec<Friend>,
+    followers: Vec<Friend>,
+    error: Option<String>,
 }
 
-fn fetch_profile(client: &reqwest::blocking::Client, jwt: &str, user_id: u64) -> Result<UserProfile, String> {
-    let response = client
-        .get(format!("{API_BASE}/users/{user_id}"))
-        .bearer_auth(jwt)
-        .send()
-        .map_err(|e| format!("request failed: {e}"))?;
-
-    if !response.status().is_success() {
-        return Err(format!("Duolingo API returned HTTP {}", response.status()));
+impl App {
+    fn new(client: Client) -> Self {
+        let mut app = Self {
+            client,
+            tab: Tab::Following,
+            following: Vec::new(),
+            followers: Vec::new(),
+            error: None,
+        };
+        app.refresh();
+        app
     }
 
-    response
-        .json::<UserProfile>()
-        .map_err(|e| format!("failed to parse profile response: {e}"))
-}
+    fn refresh(&mut self) {
+        self.error = None;
 
-fn run() -> Result<(), String> {
-    dotenvy::dotenv().map_err(|e| format!("failed to load .env: {e}"))?;
+        match self.client.following() {
+            Ok(mut friends) => {
+                friends.sort_by(|a, b| b.weekly_xp.cmp(&a.weekly_xp));
+                self.following = friends;
+            }
+            Err(e) => self.error = Some(format!("following: {e}")),
+        }
 
-    let jwt = env::var("DUOLINGO_JWT_TOKEN")
-        .map_err(|_| "DUOLINGO_JWT_TOKEN is not set in .env".to_string())?;
-
-    let user_id = user_id_from_jwt(&jwt)?;
-
-    let client = reqwest::blocking::Client::new();
-    let profile = fetch_profile(&client, &jwt, user_id)?;
-
-    println!("Logged in as: {}", profile.username);
-    println!("Total XP:     {}", profile.total_xp);
-    println!("Streak:       {}", profile.streak.unwrap_or(0));
-
-    Ok(())
-}
-
-fn main() -> ExitCode {
-    match run() {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(e) => {
-            eprintln!("error: {e}");
-            ExitCode::FAILURE
+        match self.client.followers() {
+            Ok(mut friends) => {
+                friends.sort_by(|a, b| b.weekly_xp.cmp(&a.weekly_xp));
+                self.followers = friends;
+            }
+            Err(e) => self.error = Some(format!("followers: {e}")),
         }
     }
+
+    fn friends_table(ui: &mut egui::Ui, friends: &[Friend]) {
+        use egui_extras::{Column, TableBuilder};
+
+        TableBuilder::new(ui)
+            .striped(true)
+            .column(Column::remainder().at_least(140.0))
+            .column(Column::auto().at_least(120.0))
+            .column(Column::auto().at_least(80.0))
+            .column(Column::auto().at_least(80.0))
+            .column(Column::auto().at_least(80.0))
+            .column(Column::auto().at_least(60.0))
+            .header(22.0, |mut header| {
+                header.col(|ui| {
+                    ui.strong("Name");
+                });
+                header.col(|ui| {
+                    ui.strong("Username");
+                });
+                header.col(|ui| {
+                    ui.strong("Total XP");
+                });
+                header.col(|ui| {
+                    ui.strong("Weekly XP");
+                });
+                header.col(|ui| {
+                    ui.strong("Monthly XP");
+                });
+                header.col(|ui| {
+                    ui.strong("Active");
+                });
+            })
+            .body(|body| {
+                body.rows(20.0, friends.len(), |mut row| {
+                    let friend = &friends[row.index()];
+                    row.col(|ui| {
+                        ui.label(if friend.has_plus {
+                            format!("{} \u{1F48E}", friend.name)
+                        } else {
+                            friend.name.clone()
+                        });
+                    });
+                    row.col(|ui| {
+                        ui.label(&friend.username);
+                    });
+                    row.col(|ui| {
+                        ui.label(friend.total_xp.to_string());
+                    });
+                    row.col(|ui| {
+                        ui.label(friend.weekly_xp.to_string());
+                    });
+                    row.col(|ui| {
+                        ui.label(friend.monthly_xp.to_string());
+                    });
+                    row.col(|ui| {
+                        ui.label(if friend.has_recent_activity { "\u{1F7E2}" } else { "" });
+                    });
+                });
+            });
+    }
+}
+
+impl eframe::App for App {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let panel_frame = egui::Frame::central_panel(&ui.style().clone());
+        panel_frame.show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.heading("Duolingo Friend Updates");
+                if ui.button("Refresh").clicked() {
+                    self.refresh();
+                }
+            });
+
+            if let Some(err) = &self.error {
+                ui.colored_label(egui::Color32::RED, err);
+            }
+
+            ui.separator();
+
+            ui.horizontal(|ui| {
+                ui.selectable_value(
+                    &mut self.tab,
+                    Tab::Following,
+                    format!("Following ({})", self.following.len()),
+                );
+                ui.selectable_value(
+                    &mut self.tab,
+                    Tab::Followers,
+                    format!("Followers ({})", self.followers.len()),
+                );
+            });
+
+            ui.separator();
+
+            let friends = match self.tab {
+                Tab::Following => &self.following,
+                Tab::Followers => &self.followers,
+            };
+
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                Self::friends_table(ui, friends);
+            });
+        });
+    }
+}
+
+fn main() -> eframe::Result<()> {
+    let client = match Client::from_env() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    eframe::run_native(
+        "LuoDingo - Friend Updates",
+        eframe::NativeOptions::default(),
+        Box::new(|_cc| Ok(Box::new(App::new(client)))),
+    )
 }
