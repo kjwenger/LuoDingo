@@ -75,6 +75,28 @@ docker run -p 3000:3000 -e DUOLINGO_JWT_TOKEN="$(grep -oP '(?<=DUOLINGO_JWT_TOKE
 
 No secret is needed to *build* the image — same reasoning as the CI build step (`/feed` is `force-dynamic`, so no live fetch happens at build time). CI builds the image on every push touching `nextjs/**` to catch Dockerfile bitrot, but doesn't push it anywhere.
 
+### Pushing to a registry
+
+The private registry this has been pushed to is `192.168.178.17:5000` — a plain **Docker Registry v2 over HTTP, no TLS, no auth** (confirmed via `GET /v2/` returning `200`). Current images there: `luodingo-nextjs:latest` and `luodingo-nextjs:<git-short-sha>` (e.g. `482347a`) for traceability.
+
+Because it's plain HTTP, `docker push` won't work out of the box — the Docker daemon refuses to talk to a non-TLS registry unless it's listed in `insecure-registries` in `/etc/docker/daemon.json`, which needs a **daemon restart** to take effect (disruptive if other containers are running without `--live-restore`). Instead, push with [`skopeo`](https://github.com/containers/skopeo) (`apt install skopeo`), which talks to the registry directly and falls back to HTTP on its own — no daemon config or restart needed:
+
+```bash
+docker build -t luodingo-nextjs:latest -t luodingo-nextjs:$(git rev-parse --short HEAD) .
+
+skopeo copy --dest-tls-verify=false \
+  docker-daemon:luodingo-nextjs:latest \
+  docker://192.168.178.17:5000/luodingo-nextjs:latest
+
+skopeo copy --dest-tls-verify=false \
+  docker-daemon:luodingo-nextjs:$(git rev-parse --short HEAD) \
+  docker://192.168.178.17:5000/luodingo-nextjs:$(git rev-parse --short HEAD)
+```
+
+Verify what's on the registry with `curl http://192.168.178.17:5000/v2/luodingo-nextjs/tags/list`.
+
+This is a manual, one-off process right now — nothing in CI pushes here automatically.
+
 ## Validating the spec
 
 ```bash
