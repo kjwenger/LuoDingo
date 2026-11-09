@@ -8,6 +8,7 @@ A small Rust client and desktop GUI for the unofficial Duolingo API. See the [to
 - Fetches the friends activity feed (league promotions, kudos, follows — what's actually "recently achieved"), plus the lists of people you follow (`following`) and who follow you (`followers`), including each person's weekly/monthly/total XP and a recent-activity flag.
 - Shows that data in a native desktop window, with an Updates tab (the achievement feed, styled as cards — avatar, name, timestamp, a league/milestone badge, and a working **Celebrate** button) plus Following/Followers tables, and a manual Refresh button — via **two independent GUI frontends** that share the same data/business logic (see **Layout**).
 - Celebrate actually reacts on your real account: it calls Duolingo's `POST /card/reaction` with `reaction: "CONGRATS"` (reverse-engineered and verified live — see `core::api::react`), the same thing the real web app's "FEIERN" button does.
+- A **Celebrate All** button in the header does this for every not-yet-celebrated update in one click (`Controller::celebrate_all`) — for days you just want to pat everyone on the shoulder without clicking through each card individually. It's sequential (one request per card, same as clicking Celebrate that many times) so it can take a few seconds with a lot of updates, and the button shows/updates a live count of how many are still eligible.
 
 ## Layout
 

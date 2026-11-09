@@ -224,6 +224,16 @@ impl eframe::App for App {
                     info!("Refresh clicked");
                     self.controller.refresh();
                 }
+
+                let celebratable = self.controller.celebratable_count();
+                let label = format!("\u{1F389} Celebrate All ({celebratable})");
+                if ui
+                    .add_enabled(celebratable > 0, egui::Button::new(label))
+                    .clicked()
+                {
+                    info!("Celebrate All clicked: {celebratable} eligible");
+                    self.controller.celebrate_all();
+                }
             });
 
             if let Some(err) = &self.controller.error {

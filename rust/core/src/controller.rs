@@ -71,7 +71,8 @@ impl Controller {
 
     /// Sends a "Celebrate" reaction for the given update and, on success, updates that
     /// card's counts locally so the UI reflects it immediately without a full refresh.
-    pub fn celebrate(&mut self, event_id: &str) {
+    /// Returns whether it succeeded.
+    pub fn celebrate(&mut self, event_id: &str) -> bool {
         info!("celebrate: event_id={event_id}");
         match self.client.react(event_id, CELEBRATE_REACTION) {
             Ok(()) => {
@@ -85,11 +86,52 @@ impl Controller {
                 } else {
                     warn!("celebrate: event_id={event_id} reacted but no matching card found locally");
                 }
+                true
             }
             Err(e) => {
                 warn!("celebrate: event_id={event_id} failed: {e}");
                 self.error = Some(format!("celebrate: {e}"));
+                false
             }
         }
+    }
+
+    /// Every update that can still be celebrated: has an event id (FOLLOW cards don't) and
+    /// hasn't already been reacted to.
+    pub fn celebratable_count(&self) -> usize {
+        self.updates
+            .iter()
+            .filter(|c| c.event_id.is_some() && c.reaction_type.is_none())
+            .count()
+    }
+
+    /// Celebrates every eligible update in one go (see `celebratable_count`). Keeps going
+    /// even if some calls fail, logging each one; the final error (if any) summarizes the
+    /// failure count rather than overwriting itself per-card. Returns how many succeeded.
+    pub fn celebrate_all(&mut self) -> usize {
+        let event_ids: Vec<String> = self
+            .updates
+            .iter()
+            .filter(|c| c.reaction_type.is_none())
+            .filter_map(|c| c.event_id.clone())
+            .collect();
+
+        info!("celebrate_all: {} eligible cards", event_ids.len());
+        let (mut succeeded, mut failed) = (0, 0);
+        for event_id in &event_ids {
+            if self.celebrate(event_id) {
+                succeeded += 1;
+            } else {
+                failed += 1;
+            }
+        }
+
+        info!("celebrate_all: done, {succeeded} succeeded, {failed} failed");
+        self.error = if failed > 0 {
+            Some(format!("celebrate_all: {failed} of {} failed (see logs)", event_ids.len()))
+        } else {
+            None
+        };
+        succeeded
     }
 }

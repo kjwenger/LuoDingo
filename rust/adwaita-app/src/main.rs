@@ -29,6 +29,7 @@ struct AppState {
 #[derive(Clone)]
 struct Widgets {
     banner: adw::Banner,
+    celebrate_all_button: gtk::Button,
     updates_list: gtk::Box,
     following_list: gtk::ListBox,
     followers_list: gtk::ListBox,
@@ -215,21 +216,27 @@ fn clear_box(container: &gtk::Box) {
 }
 
 fn render(state: &Rc<RefCell<AppState>>, widgets: &Widgets) {
-    let (error, updates, following, followers) = {
+    let (error, updates, following, followers, celebratable) = {
         let st = state.borrow();
         (
             st.controller.error.clone(),
             st.controller.updates.clone(),
             st.controller.following.clone(),
             st.controller.followers.clone(),
+            st.controller.celebratable_count(),
         )
     };
     debug!(
-        "render: {} updates, {} following, {} followers, error={error:?}",
+        "render: {} updates, {} following, {} followers, {celebratable} celebratable, error={error:?}",
         updates.len(),
         following.len(),
         followers.len()
     );
+
+    widgets
+        .celebrate_all_button
+        .set_label(&format!("\u{1F389} Celebrate All ({celebratable})"));
+    widgets.celebrate_all_button.set_sensitive(celebratable > 0);
 
     match error {
         Some(err) => {
@@ -295,9 +302,12 @@ fn build_window(app: &adw::Application, controller: Controller) -> adw::Applicat
     let refresh_button = gtk::Button::from_icon_name("view-refresh-symbolic");
     refresh_button.set_tooltip_text(Some("Refresh"));
 
+    let celebrate_all_button = gtk::Button::with_label("\u{1F389} Celebrate All");
+
     let header = adw::HeaderBar::new();
     header.set_title_widget(Some(&switcher_title));
     header.pack_end(&refresh_button);
+    header.pack_end(&celebrate_all_button);
 
     let banner = adw::Banner::new("");
 
@@ -311,6 +321,7 @@ fn build_window(app: &adw::Application, controller: Controller) -> adw::Applicat
 
     let widgets = Widgets {
         banner,
+        celebrate_all_button,
         updates_list,
         following_list,
         followers_list,
@@ -324,6 +335,17 @@ fn build_window(app: &adw::Application, controller: Controller) -> adw::Applicat
         move |_| {
             info!("Refresh clicked");
             state.borrow_mut().controller.refresh();
+            render(&state, &widgets);
+        }
+    });
+
+    widgets.celebrate_all_button.connect_clicked({
+        let state = state.clone();
+        let widgets = widgets.clone();
+        move |_| {
+            let celebratable = state.borrow().controller.celebratable_count();
+            info!("Celebrate All clicked: {celebratable} eligible");
+            state.borrow_mut().controller.celebrate_all();
             render(&state, &widgets);
         }
     });
