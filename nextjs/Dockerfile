@@ -19,6 +19,16 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # No DUOLINGO_JWT_TOKEN needed here: app/feed/page.tsx is force-dynamic, so Next.js never
 # attempts the live Duolingo fetch at build time (verified locally with the var unset).
+#
+# Baked in at build time for reverse-proxy-under-a-prefix deployments (e.g. JoNAS's
+# /luodingo/ path) -- empty by default so a plain `docker build` stays root-mounted, the
+# documented default. See next.config.ts. NEXT_PUBLIC_* vars are inlined into the client
+# bundle by `next build` itself reading process.env, so these need to be real build-stage
+# ENV vars, not just Docker ARGs.
+ARG NEXT_BASE_PATH=
+ARG NEXT_PUBLIC_BASE_PATH=
+ENV NEXT_BASE_PATH=$NEXT_BASE_PATH
+ENV NEXT_PUBLIC_BASE_PATH=$NEXT_PUBLIC_BASE_PATH
 RUN npm run build
 
 # ---- runner: minimal production image ----

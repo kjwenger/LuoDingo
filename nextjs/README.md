@@ -83,8 +83,13 @@ Because it's plain HTTP, `docker push` won't work out of the box — the Docker 
 
 **Architecture matters — the actual deploy target (JoNAS, a Raspberry Pi 4) is `linux/arm64`.** A plain `docker build` targets whatever your *build machine's* architecture is; built on a typical amd64 dev box, that image fails on the Pi with `exec format error` (the kernel can't run an amd64 binary) — hit this live the first time. Cross-build for arm64 explicitly with `docker buildx` (register QEMU emulation once per machine if building on non-ARM hardware: `docker run --privileged --rm tonistiigi/binfmt --install all`):
 
+Deploying behind JoNAS's `/luodingo` reverse-proxy path (`stacks/luodingo-nextjs/` in the JoNAS repo) also needs `NEXT_BASE_PATH`/`NEXT_PUBLIC_BASE_PATH` baked in at build time (`next.config.ts`, `app/docs/SwaggerDocs.tsx`) — basePath can't be switched at runtime, and a root-mounted build 404s under a path prefix:
+
 ```bash
-docker buildx build --platform linux/arm64 -t luodingo-nextjs:latest -t luodingo-nextjs:$(git rev-parse --short HEAD) --load .
+docker buildx build --platform linux/arm64 \
+  --build-arg NEXT_BASE_PATH=/luodingo \
+  --build-arg NEXT_PUBLIC_BASE_PATH=/luodingo \
+  -t luodingo-nextjs:latest -t luodingo-nextjs:$(git rev-parse --short HEAD) --load .
 
 skopeo copy --dest-tls-verify=false \
   docker-daemon:luodingo-nextjs:latest \

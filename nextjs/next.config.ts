@@ -5,6 +5,14 @@ const nextConfig: NextConfig = {
   // see Dockerfile.
   output: "standalone",
 
+  // Set at build time only when this build is deployed behind a reverse proxy under a
+  // URL prefix (e.g. https://host/luodingo/...) -- see Dockerfile's NEXT_BASE_PATH build
+  // arg. Empty by default so direct-port/root-mounted deployments (the documented
+  // default) are unaffected. next/link and next/navigation pick this up automatically;
+  // anything that isn't one of those (plain <a>, a client fetch of a public/ asset) has
+  // to be prefixed by hand -- see app/page.tsx and app/docs/SwaggerDocs.tsx.
+  basePath: process.env.NEXT_BASE_PATH || "",
+
   // cacheComponents (and partialPrefetching, which requires it) are off: this app has a
   // single account/JWT and wants every read to hit Duolingo live with zero caching, which
   // is what cacheComponents' mandatory Suspense-boundary-for-dynamic-data model is built to

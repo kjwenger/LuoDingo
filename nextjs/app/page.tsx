@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function Home() {
   return (
     <div className="flex flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
@@ -16,18 +18,18 @@ export default function Home() {
           , plus a web UI with equivalent functionality to its Rust desktop apps.
         </p>
         <div className="flex gap-3">
-          <a
+          <Link
             className="flex h-12 items-center justify-center rounded-full bg-foreground px-6 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
             href="/feed"
           >
             Open Friend Updates
-          </a>
-          <a
+          </Link>
+          <Link
             className="flex h-12 items-center justify-center rounded-full border border-black/10 px-6 transition-colors hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
             href="/docs"
           >
             View API docs
-          </a>
+          </Link>
         </div>
       </main>
     </div>
